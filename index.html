@@ -1,0 +1,4193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PERPS · single-token perp on Uniswap V4</title>
+<link rel="icon" type="image/png" href="./logo.png">
+<link rel="apple-touch-icon" href="./logo.png">
+<meta name="description" content="The first perpetuals protocol that lives entirely inside a Uniswap V4 pool. No engine. No oracle. Just hooks.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@perpsV4">
+<meta property="og:title" content="PERPS">
+<meta property="og:description" content="Virtual perps on Uniswap V4. No oracle. Just hooks.">
+<meta property="og:image" content="./logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+  /* perps. — purple hook theme */
+  --bg:           #050505;
+  --bg-2:         #0d0d10;
+  --bg-3:         #14141a;
+  --bg-soft:      #1a1a22;
+  --bg-row:       #0f0f14;
+  --paper:        #ffffff;
+  --paper-dim:    #b8b8c0;
+  --paper-faint:  #6e6e7a;
+  --line:         #22222a;
+  --line-soft:    #18181f;
+  --line-strong:  #2f2f3a;
+  --accent:       #a855f7;
+  --accent-2:     #8b5cf6;
+  --accent-glow:  rgba(168, 85, 247, 0.35);
+  --warn:         #f59e0b;
+  --long:         #10b981;
+  --short:        #ef4444;
+  --pos:          #10b981;
+  --neg:          #ef4444;
+  --healthy:      #10b981;
+  --warning:      #f59e0b;
+  --danger:       #ef4444;
+  --mono:         'JetBrains Mono', 'IBM Plex Mono', monospace;
+  --display:      'Quicksand', system-ui, sans-serif;
+  --display-q:    'Fredoka', 'Quicksand', sans-serif;
+}
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--paper);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse 70% 40% at 50% -10%, rgba(125,249,255,0.07), transparent 60%),
+      radial-gradient(ellipse 50% 30% at 90% 30%, rgba(91,227,166,0.04), transparent 60%),
+      linear-gradient(rgba(245,241,232,0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,241,232,0.022) 1px, transparent 1px);
+    background-size: auto, auto, 56px 56px, 56px 56px;
+    background-position: 0 0, 0 0, -1px -1px, -1px -1px;
+  }
+
+  ::selection { background: var(--accent); color: var(--bg); }
+
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; }
+
+  /* ───── NAV ───── */
+  nav.top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 36px;
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,11,15,0.72);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .brand {
+    display: flex; align-items: center; gap: 14px;
+    font-family: var(--serif);
+    font-size: 24px; font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+  .brand i { font-style: italic; color: var(--accent); margin-right: 1px; }
+  .brand-mark {
+    width: 30px; height: 30px;
+    position: relative;
+    display: grid; place-items: center;
+  }
+  .brand-mark svg { width: 100%; height: 100%; }
+  nav.top ul {
+    display: flex; gap: 32px; list-style: none;
+    font-family: var(--mono);
+    font-size: 12px; letter-spacing: 0.04em;
+    color: var(--paper-dim);
+    text-transform: lowercase;
+  }
+  nav.top ul a { transition: color .2s; }
+  nav.top ul a:hover { color: var(--paper); }
+  .nav-right { display: flex; gap: 10px; align-items: center; }
+  .net-pill {
+    font-family: var(--mono); font-size: 11px;
+    padding: 6px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 20px;
+    color: var(--paper-dim);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .net-pill::before {
+    content: ''; width: 6px; height: 6px;
+    background: var(--long); border-radius: 50%;
+    box-shadow: 0 0 6px var(--long);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: .4; } }
+  .cta {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--paper); color: var(--bg);
+    border: none; padding: 11px 18px;
+    border-radius: 4px;
+    font-weight: 500; letter-spacing: 0.03em;
+    transition: all .2s;
+    text-transform: lowercase;
+  }
+  .cta:hover { background: var(--accent); transform: translateY(-1px); }
+  .cta.ghost {
+    background: transparent; color: var(--paper);
+    border: 1px solid var(--line-strong);
+  }
+  .cta.ghost:hover { border-color: var(--paper); background: rgba(245,241,232,0.04); }
+
+  /* ───── TICKER STRIP ───── */
+  .ticker-strip {
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+    background: rgba(15,17,24,0.4);
+    padding: 10px 0;
+  }
+  .ticker-track {
+    display: inline-flex;
+    gap: 48px;
+    white-space: nowrap;
+    animation: scroll 60s linear infinite;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--paper-dim);
+  }
+  @keyframes scroll { to { transform: translateX(-50%); } }
+  .ticker-item span:first-child { color: var(--paper); margin-right: 12px; }
+  .ticker-item .up { color: var(--long); }
+  .ticker-item .down { color: var(--short); }
+
+  /* ───── HERO ───── */
+  header.hero {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 60px;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 80px 36px 60px;
+    align-items: center;
+    min-height: 78vh;
+    position: relative;
+  }
+  .tag-row { display: flex; gap: 10px; margin-bottom: 32px; flex-wrap: wrap; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.15em;
+    color: var(--paper-dim);
+    padding: 6px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: 20px;
+  }
+  .tag-dot { width: 5px; height: 5px; background: var(--long); border-radius: 50%; box-shadow: 0 0 6px var(--long); }
+  .tag-dot.cyan { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  h1.headline {
+    font-family: var(--serif);
+    font-size: clamp(46px, 6.8vw, 92px);
+    font-weight: 300;
+    line-height: 0.96;
+    letter-spacing: -0.035em;
+    margin-bottom: 32px;
+  }
+  h1.headline em {
+    font-style: italic;
+    font-variation-settings: 'opsz' 144, 'SOFT' 100;
+    color: var(--accent);
+    font-weight: 400;
+  }
+  h1.headline .strike { color: var(--paper-faint); position: relative; }
+  h1.headline .strike::after {
+    content: ''; position: absolute;
+    left: -2%; right: -2%; top: 52%;
+    height: 2px; background: var(--short);
+    transform: rotate(-3deg);
+  }
+
+  .sub {
+    font-size: 17px;
+    color: var(--paper-dim);
+    max-width: 540px;
+    line-height: 1.55;
+    margin-bottom: 40px;
+  }
+  .sub strong { color: var(--paper); font-weight: 500; }
+  .hero-ctas { display: flex; gap: 12px; margin-bottom: 56px; flex-wrap: wrap; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--line);
+    padding-top: 26px;
+  }
+  .stat { padding-right: 18px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: none; padding-right: 0; }
+  .stat-num {
+    font-family: var(--serif);
+    font-size: 30px;
+    letter-spacing: -0.025em;
+    font-weight: 400;
+    line-height: 1;
+  }
+  .stat-num.long { color: var(--long); }
+  .stat-num.short { color: var(--short); }
+  .stat-num small {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--paper-faint);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .stat-label {
+    font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--paper-faint);
+    margin-top: 10px;
+  }
+
+  /* ───── HERO VISUAL — the spring ───── */
+  .hero-vis {
+    position: relative;
+    height: 540px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background:
+      radial-gradient(ellipse 60% 80% at 50% 50%, rgba(125,249,255,0.05), transparent 70%),
+      linear-gradient(180deg, rgba(15,17,24,0.6), rgba(10,11,15,0.3));
+    overflow: hidden;
+  }
+  .hero-vis .frame-label {
+    position: absolute; top: 14px; left: 16px;
+    font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--paper-faint);
+  }
+  .hero-vis .frame-label-r {
+    position: absolute; top: 14px; right: 16px;
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--paper-faint); letter-spacing: 0.06em;
+  }
+  .hero-vis .frame-label-r b { color: var(--long); font-weight: 500; }
+  .hero-vis svg.wave {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+  }
+  .hero-vis .formula {
+    position: absolute; bottom: 24px; left: 22px;
+    font-family: var(--serif); font-style: italic;
+    font-size: 36px;
+    color: var(--paper);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .hero-vis .formula sub { font-size: 0.5em; font-style: normal; vertical-align: -0.2em; opacity: 0.6; }
+  .hero-vis .formula-note {
+    position: absolute; bottom: 24px; right: 22px;
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--paper-faint);
+    text-align: right;
+    letter-spacing: 0.04em;
+  }
+  .hero-vis .formula-note span { color: var(--accent); }
+
+  /* SVG dot annotations on wave */
+  .wave-anno {
+    position: absolute;
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--paper-dim);
+    display: flex; align-items: center; gap: 6px;
+    pointer-events: none;
+  }
+  .wave-anno .d { width: 6px; height: 6px; border-radius: 50%; }
+  .wave-anno.long-anno { top: 28%; left: 16%; }
+  .wave-anno.long-anno .d { background: var(--long); box-shadow: 0 0 8px var(--long); }
+  .wave-anno.short-anno { bottom: 36%; right: 20%; }
+  .wave-anno.short-anno .d { background: var(--short); box-shadow: 0 0 8px var(--short); }
+  .wave-anno.eq-anno { top: 50%; left: 50%; transform: translate(-50%,-50%); color: var(--paper-faint); }
+  .wave-anno.eq-anno .d { background: var(--paper-faint); }
+
+  /* ───── SECTION FRAME ───── */
+  section { padding: 100px 36px; max-width: 1320px; margin: 0 auto; position: relative; }
+  .sec-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.18em;
+    color: var(--paper-faint);
+    margin-bottom: 28px;
+  }
+  .sec-tag::before {
+    content: ''; width: 24px; height: 1px; background: var(--paper-faint);
+  }
+  h2.sec-title {
+    font-family: var(--serif);
+    font-size: clamp(36px, 4.4vw, 60px);
+    font-weight: 300;
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    margin-bottom: 22px;
+    max-width: 900px;
+  }
+  h2.sec-title em { font-style: italic; color: var(--accent); }
+  .sec-lede {
+    font-size: 18px;
+    color: var(--paper-dim);
+    max-width: 640px;
+    margin-bottom: 56px;
+  }
+
+  /* ───── HOW IT WORKS ───── */
+  .how-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .how-card {
+    padding: 36px 28px 32px;
+    border-right: 1px solid var(--line);
+    position: relative;
+  }
+  .how-card:last-child { border-right: none; }
+  .how-num {
+    font-family: var(--serif); font-style: italic;
+    font-size: 14px;
+    color: var(--paper-faint);
+    margin-bottom: 28px;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .how-num b { color: var(--accent); font-size: 28px; font-weight: 400; font-style: normal; }
+  .how-title {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+  }
+  .how-title em { font-style: italic; color: var(--accent); }
+  .how-body {
+    color: var(--paper-dim);
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+  .how-mini {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--paper-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: flex; justify-content: space-between;
+  }
+  .how-mini b { color: var(--paper); font-weight: 500; }
+
+  /* ───── SPRING SECTION ───── */
+  .spring {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+    border-top: 1px solid var(--line);
+    padding-top: 80px;
+    margin-top: 40px;
+  }
+  .spring-left h3 {
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: 42px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 24px;
+  }
+  .spring-left h3 em { font-style: italic; color: var(--accent); }
+  .spring-left p {
+    color: var(--paper-dim);
+    margin-bottom: 18px;
+    max-width: 480px;
+  }
+  .formula-card {
+    border: 1px solid var(--line-strong);
+    padding: 28px 24px;
+    margin-top: 28px;
+    background: rgba(15,17,24,0.5);
+    border-radius: 6px;
+    font-family: var(--serif);
+    font-size: 28px;
+    font-style: italic;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+    max-width: 480px;
+  }
+  .formula-card .var { color: var(--accent); }
+  .formula-card .neg { color: var(--short); }
+  .formula-card small {
+    display: block;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--paper-faint);
+    font-style: normal;
+    letter-spacing: 0.06em;
+    margin-top: 16px;
+    text-transform: uppercase;
+  }
+  .spring-right {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    height: 460px;
+    position: relative;
+    background:
+      radial-gradient(ellipse at center, rgba(125,249,255,0.04), transparent 70%);
+    overflow: hidden;
+  }
+
+  /* ───── ANTI-MEV STACK ───── */
+  .mev {
+    border-top: 1px solid var(--line);
+    margin-top: 80px;
+    padding-top: 60px;
+  }
+  .mev-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--line);
+  }
+  .mev-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 24px;
+    padding: 26px 32px 26px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+  }
+  .mev-row:nth-child(odd) { padding-right: 40px; border-right: 1px solid var(--line); padding-left: 0; }
+  .mev-row:nth-child(even) { padding-left: 40px; }
+  .mev-idx {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--paper-faint);
+    letter-spacing: 0.1em;
+    padding-top: 5px;
+  }
+  .mev-h {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: -0.015em;
+    margin-bottom: 8px;
+  }
+  .mev-h em { font-style: italic; color: var(--accent); }
+  .mev-p { color: var(--paper-dim); font-size: 14.5px; line-height: 1.55; }
+  .mev-p code {
+    font-family: var(--mono); font-size: 12.5px;
+    color: var(--paper); background: rgba(125,249,255,0.08);
+    padding: 1px 6px; border-radius: 3px;
+  }
+
+  /* ───── SPLIT (TRADERS / LPS) ───── */
+  .split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .split-side {
+    padding: 48px 40px;
+    border-right: 1px solid var(--line);
+    position: relative;
+  }
+  .split-side:last-child { border-right: none; }
+  .split-side h3 {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+  }
+  .split-side h3 em { font-style: italic; color: var(--accent); }
+  .split-tag {
+    font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--paper-faint);
+    margin-bottom: 32px;
+  }
+  .split-list { list-style: none; }
+  .split-list li {
+    padding: 16px 0;
+    border-top: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    gap: 14px;
+    font-size: 14.5px;
+    align-items: baseline;
+  }
+  .split-list li b {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--paper-faint); font-weight: 400;
+    letter-spacing: 0.06em;
+  }
+  .split-list li span {
+    color: var(--paper-dim);
+  }
+  .split-list li span strong { color: var(--paper); font-weight: 500; }
+  .split-list li .v {
+    font-family: var(--mono); font-size: 13px;
+    color: var(--accent);
+  }
+  .split-list li .v.long { color: var(--long); }
+
+  /* ───── ARCHITECTURE ───── */
+  .arch-frame {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 40px;
+    background:
+      radial-gradient(ellipse at center, rgba(125,249,255,0.04), transparent 70%),
+      var(--bg-2);
+    overflow: hidden;
+  }
+
+  /* ───── SPECS TABLE ───── */
+  .specs-table {
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+  }
+  .specs-row {
+    display: grid;
+    grid-template-columns: 1.5fr 2fr 1fr;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13.5px;
+    align-items: baseline;
+  }
+  .specs-row:hover { background: rgba(125,249,255,0.02); }
+  .specs-row .k {
+    color: var(--paper);
+    letter-spacing: 0.02em;
+  }
+  .specs-row .d {
+    color: var(--paper-dim);
+    font-family: var(--sans);
+    font-size: 14.5px;
+    padding-right: 24px;
+  }
+  .specs-row .v {
+    color: var(--accent);
+    text-align: right;
+    font-weight: 500;
+  }
+  .specs-row .v.long { color: var(--long); }
+  .specs-row .v.warn { color: var(--warn); }
+
+  /* ───── LIQUIDATION ───── */
+  .liq-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 48px;
+    align-items: stretch;
+  }
+  .liq-flow {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 36px;
+    background: var(--bg-2);
+    position: relative;
+  }
+  .liq-step {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 18px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+  }
+  .liq-step:last-child { border-bottom: none; }
+  .liq-step-n {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 24px;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .liq-step h4 {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+  .liq-step p {
+    color: var(--paper-dim);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .liq-step p code {
+    font-family: var(--mono); font-size: 12.5px;
+    color: var(--paper); background: rgba(125,249,255,0.08);
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .liq-reward {
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 36px 28px;
+    background:
+      radial-gradient(ellipse at top right, rgba(91,227,166,0.06), transparent 60%),
+      var(--bg-2);
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .liq-reward .big {
+    font-family: var(--serif);
+    font-size: 80px;
+    font-weight: 300;
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    color: var(--long);
+    margin-bottom: 8px;
+  }
+  .liq-reward .big small {
+    font-family: var(--mono); font-size: 16px;
+    color: var(--paper-dim);
+    font-weight: 400;
+  }
+  .liq-reward h4 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    font-weight: 400;
+    margin-bottom: 24px;
+    color: var(--paper);
+  }
+  .liq-reward p {
+    color: var(--paper-dim);
+    font-size: 14px;
+    margin-bottom: 18px;
+  }
+  .liq-reward .mini {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--paper-faint);
+    text-transform: uppercase; letter-spacing: 0.1em;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+  .liq-reward .mini b { color: var(--long); }
+
+  /* ───── ROADMAP ───── */
+  .road {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .road-q {
+    padding: 36px 24px;
+    border-right: 1px solid var(--line);
+    position: relative;
+  }
+  .road-q:last-child { border-right: none; }
+  .road-q .q {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--paper-faint);
+    margin-bottom: 18px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .road-q .q::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--paper-mute);
+  }
+  .road-q.now .q::before { background: var(--long); box-shadow: 0 0 8px var(--long); animation: pulse 2s ease-in-out infinite; }
+  .road-q.now .q { color: var(--long); }
+  .road-q h4 {
+    font-family: var(--serif);
+    font-size: 22px; font-weight: 400;
+    margin-bottom: 16px;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+  }
+  .road-q ul { list-style: none; }
+  .road-q ul li {
+    font-size: 13.5px;
+    color: var(--paper-dim);
+    padding: 5px 0;
+    padding-left: 14px;
+    position: relative;
+  }
+  .road-q ul li::before {
+    content: '—';
+    position: absolute; left: 0;
+    color: var(--paper-faint);
+  }
+
+  /* ───── CTA STRIP ───── */
+  .cta-strip {
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 100px 36px;
+    text-align: center;
+    background:
+      radial-gradient(ellipse 60% 80% at 50% 50%, rgba(125,249,255,0.06), transparent 60%);
+  }
+  .cta-strip h2 {
+    font-family: var(--serif);
+    font-size: clamp(40px, 5.5vw, 76px);
+    font-weight: 300;
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+    max-width: 980px;
+    margin: 0 auto 28px;
+  }
+  .cta-strip h2 em { font-style: italic; color: var(--accent); }
+  .cta-strip p {
+    color: var(--paper-dim);
+    font-size: 17px;
+    max-width: 560px;
+    margin: 0 auto 36px;
+  }
+  .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  /* ───── FOOTER ───── */
+  footer {
+    padding: 60px 36px 30px;
+    max-width: 1320px;
+    margin: 0 auto;
+    border-top: 1px solid var(--line);
+  }
+  .foot-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 60px;
+  }
+  .foot-brand {
+    font-family: var(--serif);
+    font-size: 22px;
+    margin-bottom: 14px;
+    letter-spacing: -0.02em;
+  }
+  .foot-brand i { font-style: italic; color: var(--accent); }
+  .foot-tag {
+    color: var(--paper-dim);
+    font-size: 14px;
+    max-width: 320px;
+    line-height: 1.55;
+  }
+  .foot-col h5 {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--paper-faint);
+    margin-bottom: 18px;
+    font-weight: 500;
+  }
+  .foot-col ul { list-style: none; }
+  .foot-col ul li { padding: 5px 0; font-size: 14px; color: var(--paper-dim); }
+  .foot-col ul li a:hover { color: var(--paper); }
+  .foot-bottom {
+    border-top: 1px solid var(--line);
+    padding-top: 26px;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--paper-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* ───── MOBILE ───── */
+  @media (max-width: 920px) {
+    nav.top { padding: 14px 18px; }
+    nav.top ul { display: none; }
+    header.hero { grid-template-columns: 1fr; padding: 40px 18px; min-height: auto; gap: 40px; }
+    .hero-vis { height: 360px; }
+    .stats { grid-template-columns: repeat(2, 1fr); gap: 18px 0; }
+    .stat:nth-child(2) { border-right: none; }
+    section { padding: 60px 18px; }
+    .how-grid { grid-template-columns: 1fr; }
+    .how-card { border-right: none; border-bottom: 1px solid var(--line); }
+    .how-card:last-child { border-bottom: none; }
+    .spring { grid-template-columns: 1fr; gap: 36px; padding-top: 40px; }
+    .mev-grid { grid-template-columns: 1fr; }
+    .mev-row:nth-child(odd) { padding-right: 0; border-right: none; }
+    .mev-row:nth-child(even) { padding-left: 0; }
+    .split { grid-template-columns: 1fr; }
+    .split-side { border-right: none; border-bottom: 1px solid var(--line); padding: 32px 20px; }
+    .split-side:last-child { border-bottom: none; }
+    .liq-grid { grid-template-columns: 1fr; gap: 24px; }
+    .liq-reward .big { font-size: 60px; }
+    .road { grid-template-columns: 1fr; }
+    .road-q { border-right: none; border-bottom: 1px solid var(--line); }
+    .foot-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+    .specs-row { grid-template-columns: 1fr; gap: 6px; padding: 18px 0; }
+    .specs-row .v { text-align: left; }
+    .cta-strip { padding: 60px 18px; }
+  }
+
+  /* Reveal anim */
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .8s ease, transform .8s ease; }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+
+
+
+/* ──── view toggle ──── */
+#appView {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--bg);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+#appView.active { display: block !important; }
+
+/* When app is open, freeze landing scroll */
+body.app-active { overflow: hidden; }
+
+/* App-specific nav tweak (allow logo to be clickable) */
+.app-nav .brand { user-select: none; }
+.app-nav .brand:hover { opacity: 0.85; }
+
+
+:root {
+  --bg: #0A0B0F;
+  --bg-2: #11131A;
+  --bg-3: #181C28;
+  --paper: #F5F1E8;
+  --paper-dim: rgba(245,241,232,0.65);
+  --paper-faint: rgba(245,241,232,0.40);
+  --paper-mute: rgba(245,241,232,0.18);
+  --line: rgba(245,241,232,0.08);
+  --line-strong: rgba(245,241,232,0.16);
+  --long: #5BE3A6;
+  --long-dim: rgba(91,227,166,0.16);
+  --short: #FF6B6B;
+  --short-dim: rgba(255,107,107,0.16);
+  --accent: #7DF9FF;
+  --warn: #FFB86B;
+
+  --serif: 'Fraunces', 'Times New Roman', serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'DM Sans', -apple-system, system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--paper);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  background-image:
+    radial-gradient(ellipse 70% 40% at 50% -10%, rgba(125,249,255,0.06), transparent 60%),
+    linear-gradient(rgba(245,241,232,0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245,241,232,0.022) 1px, transparent 1px);
+  background-size: auto, 56px 56px, 56px 56px;
+}
+button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+a { color: inherit; text-decoration: none; }
+input { font: inherit; }
+
+/* ───── NAV ───── */
+nav.top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(10,11,15,0.75);
+  backdrop-filter: blur(20px);
+}
+.brand {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--serif);
+  font-size: 24px; font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.brand i { font-style: italic; color: var(--accent); }
+.brand-mark {
+  width: 28px; height: 28px;
+  position: relative;
+}
+.brand-mark svg { width: 100%; height: 100%; }
+nav.top ul {
+  display: flex; gap: 28px; list-style: none;
+  font-family: var(--mono);
+  font-size: 12px; letter-spacing: 0.04em;
+  color: var(--paper-dim);
+}
+nav.top ul a:hover { color: var(--paper); }
+.nav-right { display: flex; gap: 10px; align-items: center; }
+.net-pill {
+  font-family: var(--mono); font-size: 11px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  color: var(--paper-dim);
+  display: flex; align-items: center; gap: 8px;
+}
+.net-pill .dot { width: 6px; height: 6px; background: var(--long); border-radius: 50%; box-shadow: 0 0 6px var(--long); }
+.net-pill.bad .dot { background: var(--short); box-shadow: 0 0 6px var(--short); }
+.net-pill.idle .dot { background: var(--paper-mute); box-shadow: none; }
+.cta {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--paper); color: var(--bg);
+  padding: 10px 16px;
+  border-radius: 4px;
+  font-weight: 500; letter-spacing: 0.03em;
+  transition: all .2s;
+}
+.cta:hover { background: var(--accent); }
+.cta:disabled { opacity: 0.4; cursor: not-allowed; background: var(--paper-mute); }
+.cta.ghost {
+  background: transparent; color: var(--paper);
+  border: 1px solid var(--line-strong);
+}
+.cta.ghost:hover { border-color: var(--paper); background: rgba(245,241,232,0.04); }
+.cta.long { background: var(--long); color: var(--bg); }
+.cta.long:hover { background: var(--long); filter: brightness(1.1); }
+.cta.short { background: var(--short); color: var(--bg); }
+.cta.short:hover { background: var(--short); filter: brightness(1.1); }
+
+/* ───── TICKER ───── */
+.app-ticker {
+  border-bottom: 1px solid var(--line);
+  background: rgba(15,17,24,0.4);
+  padding: 9px 32px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 32px;
+  font-family: var(--mono); font-size: 11.5px;
+}
+.app-ticker-item { display: flex; flex-direction: column; gap: 3px; }
+.app-ticker-item .l { color: var(--paper-faint); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
+.app-ticker-item .v { color: var(--paper); font-weight: 500; }
+.app-ticker-item .v.up { color: var(--long); }
+.app-ticker-item .v.down { color: var(--short); }
+
+/* ───── MAIN LAYOUT ───── */
+main {
+  display: grid;
+  grid-template-columns: 320px 1fr 360px;
+  gap: 0;
+  max-width: 1500px;
+  margin: 0 auto;
+  min-height: calc(100vh - 130px);
+}
+.col-left  { border-right: 1px solid var(--line); padding: 28px 24px; }
+.col-mid   { padding: 28px 32px; }
+.col-right { border-left: 1px solid var(--line); padding: 28px 24px; }
+
+.sec-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.sec-head h3 {
+  font-family: var(--serif);
+  font-weight: 400; font-size: 22px;
+  letter-spacing: -0.015em;
+}
+.sec-head h3 em { font-style: italic; color: var(--accent); }
+.sec-head .sub {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--paper-faint);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+
+/* ───── TRADE PANEL (LEFT) ───── */
+.dir-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.how-it-works {
+  border-left: 2px solid var(--accent);
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  background: rgba(125,249,255,0.03);
+  font-family: var(--mono); font-size: 11px;
+  color: var(--paper-dim);
+  line-height: 1.6;
+}
+.hiw-line { display: flex; gap: 8px; align-items: flex-start; }
+.hiw-line + .hiw-line { margin-top: 5px; }
+.hiw-dot { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+.how-it-works b { color: var(--paper); font-weight: 500; }
+.dir-btn {
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  font-family: var(--mono); font-size: 12px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--paper-dim);
+  transition: all .15s;
+}
+.dir-btn.active.long { background: var(--long-dim); border-color: var(--long); color: var(--long); }
+.dir-btn.active.short { background: var(--short-dim); border-color: var(--short); color: var(--short); }
+.dir-btn:hover:not(.active) { color: var(--paper); border-color: var(--paper-mute); }
+
+.field { margin-bottom: 18px; }
+.field label {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--paper-faint);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+.field label .max { cursor: pointer; color: var(--accent); }
+.field label .max:hover { text-decoration: underline; }
+.field .input-wrap {
+  display: flex; align-items: center;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 12px 14px;
+  transition: border-color .15s;
+}
+.field .input-wrap:focus-within { border-color: var(--paper-mute); }
+.field input {
+  background: none; border: none; outline: none;
+  color: var(--paper); font-size: 18px;
+  flex: 1; font-family: var(--mono); font-weight: 500;
+  width: 100%;
+}
+.field input::placeholder { color: var(--paper-mute); }
+.field .input-wrap .denom {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--paper-dim);
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+  margin-left: 8px;
+}
+
+/* leverage slider */
+.lev-row {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 22px;
+}
+.lev-row .lev-display {
+  font-family: var(--serif);
+  font-size: 28px; font-weight: 400;
+  font-variation-settings: 'opsz' 144;
+  color: var(--accent);
+  font-style: italic;
+  min-width: 70px;
+}
+.lev-row .lev-display small {
+  font-family: var(--mono); font-size: 14px;
+  font-style: normal; color: var(--paper-dim);
+}
+.lev-row input[type=range] {
+  flex: 1;
+  -webkit-appearance: none; appearance: none;
+  height: 4px; background: var(--line-strong);
+  border-radius: 2px; outline: none;
+}
+.lev-row input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px;
+  background: var(--accent); border-radius: 50%; cursor: pointer;
+  box-shadow: 0 0 12px rgba(125,249,255,0.4);
+}
+.lev-row input[type=range]::-moz-range-thumb {
+  width: 16px; height: 16px;
+  background: var(--accent); border-radius: 50%; cursor: pointer;
+  border: none;
+}
+
+.preview {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  margin-bottom: 24px;
+  font-family: var(--mono); font-size: 12px;
+}
+.preview-row {
+  display: flex; justify-content: space-between;
+  padding: 5px 0;
+  color: var(--paper-dim);
+}
+.preview-row b {
+  color: var(--paper); font-weight: 500;
+}
+.preview-row .neg { color: var(--short); }
+.preview-row .pos { color: var(--long); }
+
+.open-btn {
+  width: 100%;
+  padding: 16px;
+  font-family: var(--mono); font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  border-radius: 4px;
+  transition: all .15s;
+}
+
+/* ───── POSITION LIST (MID) ───── */
+.pos-list { display: flex; flex-direction: column; gap: 14px; }
+.pos-card {
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  border-radius: 6px;
+  padding: 20px 22px;
+  display: grid;
+  grid-template-columns: 90px 1fr 1fr 1fr auto;
+  gap: 24px;
+  align-items: center;
+  transition: border-color .15s;
+}
+.pos-card:hover { border-color: var(--line-strong); }
+.pos-card.danger { border-color: var(--short-dim); background: rgba(255,107,107,0.03); }
+.pos-card .side {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-style: italic;
+  font-variation-settings: 'opsz' 144;
+}
+.pos-card .side.long { color: var(--long); }
+.pos-card .side.short { color: var(--short); }
+.pos-card .side small {
+  display: block;
+  font-family: var(--mono); font-size: 10px;
+  color: var(--paper-faint);
+  font-style: normal; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.pos-card .stat .l {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--paper-faint); text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+.pos-card .stat .v {
+  font-family: var(--mono); font-size: 14px;
+  color: var(--paper); font-weight: 500;
+}
+.pos-card .stat .v.pos { color: var(--long); }
+.pos-card .stat .v.neg { color: var(--short); }
+.pos-card .hf {
+  font-family: var(--serif);
+  font-size: 28px; font-weight: 400;
+  font-style: italic;
+  font-variation-settings: 'opsz' 144;
+}
+.pos-card .hf.healthy { color: var(--long); }
+.pos-card .hf.warning { color: var(--warn); }
+.pos-card .hf.danger { color: var(--short); }
+
+.pos-empty {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--paper-faint);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 18px;
+}
+.pos-empty small {
+  display: block;
+  font-family: var(--mono); font-style: normal;
+  font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 10px;
+  color: var(--paper-mute);
+}
+
+/* ───── STATS PANEL (RIGHT) ───── */
+.stat-block {
+  margin-bottom: 26px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.stat-block:last-child { border-bottom: none; }
+.stat-block h4 {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--paper-faint);
+  text-transform: uppercase; letter-spacing: 0.12em;
+  margin-bottom: 14px;
+}
+.big-stat {
+  font-family: var(--serif);
+  font-size: 36px; font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+.big-stat small {
+  font-family: var(--mono); font-size: 13px;
+  color: var(--paper-dim);
+  font-weight: 400;
+  margin-left: 6px;
+}
+.big-stat.up { color: var(--long); }
+.big-stat.down { color: var(--short); }
+.big-stat.accent { color: var(--accent); }
+
+.oi-bar {
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  margin: 14px 0;
+}
+.oi-long-fill { background: var(--long); }
+.oi-short-fill { background: var(--short); }
+.oi-labels {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 11px;
+}
+.oi-labels .l { color: var(--long); }
+.oi-labels .s { color: var(--short); }
+
+/* ───── BURN VAULT (between ticker and main) ───── */
+.burn-vault {
+  display: grid;
+  grid-template-columns: 1.2fr 1.6fr auto;
+  gap: 36px;
+  align-items: center;
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(90deg, rgba(255,107,107,0.05), rgba(255,184,107,0.025) 60%, transparent),
+    radial-gradient(ellipse 30% 100% at 0% 50%, rgba(255,107,107,0.06), transparent 70%);
+  position: relative;
+  overflow: hidden;
+}
+.burn-vault::before {
+  content: ''; position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--short), var(--warn));
+  box-shadow: 0 0 16px var(--short);
+}
+.bv-col { display: flex; flex-direction: column; gap: 6px; }
+.bv-label {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--paper-faint);
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.bv-big {
+  font-family: var(--serif);
+  font-size: 36px; font-weight: 400;
+  letter-spacing: -0.025em; line-height: 1;
+  color: var(--warn);
+}
+.bv-big small {
+  font-family: var(--mono); font-size: 13px;
+  color: var(--paper-dim); font-weight: 400;
+  margin-left: 6px;
+}
+.bv-sub {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--paper-faint);
+  margin-top: 2px;
+}
+.bv-progress {
+  height: 8px;
+  background: var(--bg-3);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.bv-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--short), var(--warn));
+  box-shadow: 0 0 8px rgba(255,184,107,0.5);
+  border-radius: 4px;
+  transition: width .4s ease-out;
+}
+.bv-progress-labels {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 11px;
+  margin-top: 6px;
+  color: var(--paper-dim);
+}
+.bv-progress-labels .pending { color: var(--warn); font-weight: 500; }
+.bv-progress-labels .threshold { color: var(--paper-faint); }
+.bv-btn-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.bv-btn {
+  font-family: var(--mono); font-size: 14px;
+  font-weight: 700; letter-spacing: 0.08em;
+  padding: 14px 28px;
+  background: linear-gradient(135deg, var(--short), var(--warn));
+  color: var(--bg);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .15s;
+  box-shadow: 0 0 0 1px rgba(255,107,107,0.4);
+}
+.bv-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(255,107,107,0.6), 0 6px 16px rgba(255,107,107,0.3);
+}
+.bv-btn:disabled {
+  background: var(--bg-3);
+  color: var(--paper-faint);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.bv-reward {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--paper-faint);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.bv-reward b { color: var(--warn); }
+
+/* ───── EXPLAINER SECTION ───── */
+section.explainer {
+  border-top: 1px solid var(--line);
+  padding: 80px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+section.explainer h2 {
+  font-family: var(--serif);
+  font-size: 48px; font-weight: 300;
+  letter-spacing: -0.025em;
+  margin-bottom: 18px;
+}
+section.explainer h2 em { font-style: italic; color: var(--accent); }
+section.explainer .lede {
+  font-size: 17px; color: var(--paper-dim);
+  max-width: 620px; margin-bottom: 60px;
+}
+.explainer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.explainer-card {
+  padding: 36px 28px;
+  border-right: 1px solid var(--line);
+}
+.explainer-card:last-child { border-right: none; }
+.explainer-card h3 {
+  font-family: var(--serif);
+  font-size: 24px; font-weight: 400;
+  letter-spacing: -0.015em;
+  margin-bottom: 16px;
+}
+.explainer-card h3 em { font-style: italic; color: var(--accent); }
+.explainer-card p {
+  color: var(--paper-dim); font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.compare-table {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 30px;
+  font-family: var(--mono); font-size: 13px;
+}
+.ct-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1.3fr;
+  border-bottom: 1px solid var(--line);
+}
+.ct-row:last-child { border-bottom: none; }
+.ct-row > div {
+  padding: 16px 20px;
+  border-right: 1px solid var(--line);
+  color: var(--paper-dim);
+}
+.ct-row > div:last-child { border-right: none; }
+.ct-row.ct-head {
+  background: var(--bg-2);
+  font-family: var(--serif);
+  font-size: 16px;
+  color: var(--paper);
+}
+.ct-row.ct-head small {
+  display: block;
+  font-family: var(--mono); font-size: 10px;
+  color: var(--paper-faint);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-top: 4px;
+  font-weight: normal;
+}
+.ct-row .ct-label {
+  font-family: var(--mono); font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--paper-faint);
+}
+.ct-row .ct-self {
+  background: rgba(125,249,255,0.06);
+  color: var(--accent);
+  font-weight: 500;
+}
+.ct-row.ct-head .ct-self {
+  background: rgba(125,249,255,0.10);
+  color: var(--accent);
+}
+@media (max-width: 800px) {
+  .ct-row { grid-template-columns: 1fr 1fr; }
+  .ct-row > div:nth-child(2),
+  .ct-row > div:nth-child(3) { display: none; }
+}
+
+/* ───── TOAST ───── */
+#toast-wrap {
+  position: fixed; bottom: 24px; right: 24px;
+  z-index: 200; display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 14px 18px;
+  min-width: 280px; max-width: 380px;
+  font-family: var(--mono); font-size: 12.5px;
+  animation: toastIn .3s ease-out;
+}
+.toast.error { border-color: var(--short); color: var(--short); }
+.toast.success { border-color: var(--long); color: var(--long); }
+.toast.info { color: var(--accent); }
+.toast b { color: var(--paper); }
+.toast .tx-link { color: var(--accent); text-decoration: underline; }
+@keyframes toastIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ───── FOOTER ───── */
+footer {
+  border-top: 1px solid var(--line);
+  padding: 30px 32px;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--paper-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+footer a { color: var(--paper-dim); }
+footer a:hover { color: var(--paper); }
+
+/* ───── MOBILE ───── */
+@media (max-width: 1200px) {
+  main { grid-template-columns: 1fr; }
+  .col-left, .col-right { border: none; border-bottom: 1px solid var(--line); }
+  .pos-card { grid-template-columns: 80px 1fr 1fr; }
+  .pos-card .stat:nth-child(n+5) { display: none; }
+  .app-ticker { grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 9px 16px; }
+  nav.top { padding: 12px 16px; }
+  nav.top ul { display: none; }
+  .explainer-grid { grid-template-columns: 1fr; }
+  .explainer-card { border-right: none; border-bottom: 1px solid var(--line); }
+  section.explainer { padding: 50px 16px; }
+}
+
+/* ──── BANNERS ──── */
+.banner {
+  padding: 12px 32px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.banner.demo {
+  background: rgba(125,249,255,0.08);
+  color: var(--accent);
+  border-bottom-color: rgba(125,249,255,0.2);
+}
+.banner.paused {
+  background: rgba(255,107,107,0.12);
+  color: var(--short);
+  border-bottom-color: rgba(255,107,107,0.3);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.banner.hidden { display: none; }
+.banner b { color: var(--paper); }
+.banner .pulse-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.6s ease-in-out infinite;
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* ──── KEEPER PANEL ──── */
+.keeper-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.keeper-btn {
+  padding: 10px 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: all .15s;
+  cursor: pointer;
+}
+.keeper-btn:hover:not(:disabled) {
+  color: var(--paper);
+  border-color: var(--paper-mute);
+  background: rgba(245,241,232,0.02);
+}
+.keeper-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ──── LIQUIDATOR SECTION ──── */
+.liq-section {
+  margin-top: 36px;
+  padding-top: 28px;
+  border-top: 1px dashed var(--line-strong);
+}
+.liq-section .pos-card {
+  grid-template-columns: 90px 1fr 1fr 1fr auto;
+}
+.liq-section .danger-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--short);
+  background: rgba(255,107,107,0.1);
+  padding: 3px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-left: 8px;
+}
+.liq-section .danger-tag::before {
+  content: '';
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--short);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+
+/* ──── BRAND + X BUTTON ──── */
+.brand-img {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  object-fit: cover;
+  display: block;
+}
+.x-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  color: var(--paper-dim);
+  transition: all .15s;
+  text-decoration: none;
+}
+.x-btn:hover {
+  color: var(--paper);
+  border-color: var(--paper);
+  background: rgba(245,241,232,0.04);
+}
+.x-btn svg { width: 14px; height: 14px; display: block; }
+
+
+
+
+
+/* ━━━ perps. v2 — purple hook design system ━━━ */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg) !important;
+  color: var(--paper) !important;
+  font-family: var(--display) !important;
+  margin: 0 !important;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'tnum' on, 'cv11' on;
+}
+
+/* ── Nav ── */
+.p-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 44px;
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(5, 5, 5, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--line);
+}
+.p-brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  color: var(--paper); text-decoration: none;
+  font-family: var(--display);
+  font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
+}
+.p-brand .dot { color: var(--accent); }
+.p-brand svg { color: var(--paper); }
+.p-brand-large { font-size: 22px; }
+
+.p-nav-links { display: flex; gap: 28px; }
+.p-nav-links a {
+  color: var(--paper-dim); text-decoration: none;
+  font-size: 14px; font-weight: 500;
+  transition: color 0.15s;
+}
+.p-nav-links a:hover { color: var(--accent); }
+
+.p-cta, .p-cta-big {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white !important;
+  border: none;
+  padding: 10px 20px;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  text-decoration: none;
+  box-shadow: 0 4px 24px var(--accent-glow);
+}
+.p-cta:hover, .p-cta-big:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 32px var(--accent-glow);
+}
+.p-cta-big { padding: 14px 28px; font-size: 16px; }
+.p-cta-arrow { display: inline-block; transition: transform 0.15s; }
+.p-cta:hover .p-cta-arrow, .p-cta-big:hover .p-cta-arrow { transform: translateX(3px); }
+
+.p-cta-ghost {
+  color: var(--paper-dim);
+  text-decoration: none;
+  font-size: 14px; font-weight: 500;
+  padding: 14px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.p-cta-ghost:hover { border-color: var(--accent); color: var(--paper); }
+
+/* ── Hero ── */
+.p-hero {
+  position: relative;
+  padding: 80px 44px 120px;
+  overflow: hidden;
+}
+.p-hero::before {
+  content: '';
+  position: absolute;
+  top: -20%; right: -10%;
+  width: 800px; height: 800px;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 60%);
+  pointer-events: none;
+}
+.p-hero-inner {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 60px;
+  max-width: 1280px;
+  margin: 0 auto;
+  align-items: center;
+  position: relative;
+}
+.p-hero-left { display: flex; flex-direction: column; gap: 28px; }
+.p-hero-title {
+  font-size: clamp(48px, 6vw, 80px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin: 0;
+  color: var(--paper);
+}
+.accent { color: var(--accent); }
+.p-hero-sub {
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--paper-dim);
+  margin: 0;
+  max-width: 520px;
+}
+.p-hero-features {
+  display: flex; gap: 20px; flex-wrap: wrap;
+  margin-top: 8px;
+}
+.p-feat {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px 12px 14px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.p-feat-icon {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--accent);
+  border-radius: 10px;
+}
+.p-feat-icon svg { width: 18px; height: 18px; }
+.p-feat-l { font-size: 13px; line-height: 1.25; color: var(--paper-dim); font-weight: 500; }
+.p-feat-l:first-child { color: var(--paper); font-weight: 600; }
+
+.p-hero-cta-row { display: flex; gap: 14px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+
+/* ── Hero right (3D-ish orb) ── */
+.p-hero-right { display: flex; justify-content: center; align-items: center; position: relative; }
+.p-hero-orb {
+  position: relative;
+  width: 380px; height: 380px;
+  max-width: 100%;
+}
+.p-orb-glow {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+  filter: blur(30px);
+}
+.p-orb-disc {
+  position: absolute; inset: 15%;
+  background: linear-gradient(135deg, #1a0e2e 0%, #0d0d10 60%);
+  border-radius: 32px;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  display: grid; place-items: center;
+  color: var(--paper);
+  box-shadow:
+    inset 0 1px 0 rgba(168, 85, 247, 0.4),
+    0 30px 80px rgba(168, 85, 247, 0.25);
+  transform: rotate(-8deg);
+}
+.p-orb-ring {
+  position: absolute; inset: 8%;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0.45;
+  transform: rotate(20deg) scaleY(0.32);
+  box-shadow: 0 0 40px var(--accent-glow);
+}
+.p-orb-badge {
+  position: absolute; right: 0; bottom: 18%;
+  background: var(--bg-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 8px 14px 8px 10px;
+  font-size: 14px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+}
+
+/* ── Sections ── */
+.p-section {
+  padding: 80px 44px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.p-section-head {
+  margin-bottom: 48px;
+  max-width: 720px;
+}
+.p-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+.p-section h2 {
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0 0 16px;
+}
+.p-section h2 + p {
+  font-size: 17px;
+  color: var(--paper-dim);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Cards grid ── */
+.p-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.p-card {
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 28px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.p-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.p-card-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.p-card h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
+}
+.p-card p {
+  font-size: 14px;
+  color: var(--paper-dim);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ── How grid (3 steps) ── */
+.p-how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  margin-top: 20px;
+}
+.p-how-step {
+  padding: 32px 24px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  position: relative;
+}
+.p-how-step-num {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.p-how-step h3 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  letter-spacing: -0.01em;
+}
+.p-how-step p {
+  font-size: 15px;
+  color: var(--paper-dim);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Specs grid ── */
+.p-specs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.p-spec {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.p-spec:nth-child(odd) { border-right: 1px solid var(--line); }
+.p-spec:nth-last-child(-n+2) { border-bottom: none; }
+.p-spec > span:first-child {
+  color: var(--paper-faint);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.p-spec > span:last-child {
+  color: var(--paper);
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* ── Footer ── */
+.p-footer {
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  padding: 60px 44px 30px;
+  margin-top: 80px;
+}
+.p-footer-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.5fr 2fr;
+  gap: 60px;
+}
+.p-footer-left { display: flex; flex-direction: column; gap: 14px; }
+.p-footer-left p {
+  color: var(--paper-dim);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 360px;
+}
+.p-footer-links { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; }
+.p-footer-h {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--paper-faint);
+  margin-bottom: 14px;
+}
+.p-footer-links a {
+  display: block;
+  color: var(--paper-dim);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 4px 0;
+  transition: color 0.15s;
+}
+.p-footer-links a:hover { color: var(--accent); }
+.p-footer-bottom {
+  max-width: 1280px;
+  margin: 60px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between;
+  color: var(--paper-faint);
+  font-size: 13px;
+  font-family: var(--mono);
+}
+
+/* ━━━ Trade UI restyle to match new theme ━━━ */
+.trade-view, #trade {
+  background: var(--bg) !important;
+  color: var(--paper) !important;
+}
+
+/* Position cards */
+.pos-card {
+  background: var(--bg-3) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 14px !important;
+  padding: 14px 18px !important;
+  box-shadow: none !important;
+}
+.pos-card[style*="border-color:var(--accent)"] {
+  border-color: var(--accent) !important;
+  background: linear-gradient(135deg, rgba(168,85,247,0.04), var(--bg-3)) !important;
+}
+
+/* Long/short pills */
+.side.long, .side.short {
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+.side.long { color: var(--long) !important; background: rgba(16, 185, 129, 0.12); }
+.side.short { color: var(--short) !important; background: rgba(239, 68, 68, 0.12); }
+
+/* Inputs */
+input[type="number"], input[type="text"] {
+  background: var(--bg-3) !important;
+  color: var(--paper) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 10px !important;
+  padding: 10px 14px !important;
+  font-family: var(--mono) !important;
+  font-size: 14px !important;
+}
+input:focus { border-color: var(--accent) !important; outline: none !important; box-shadow: 0 0 0 3px var(--accent-glow) !important; }
+
+/* Sliders */
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+/* Buttons in trade UI */
+.cta {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  padding: 12px 20px !important;
+  box-shadow: 0 4px 18px var(--accent-glow);
+}
+.cta.ghost {
+  background: var(--bg-3) !important;
+  color: var(--paper) !important;
+  border: 1px solid var(--line-strong) !important;
+  box-shadow: none !important;
+}
+.cta.short {
+  background: var(--short) !important;
+  box-shadow: 0 4px 18px rgba(239, 68, 68, 0.3);
+}
+.cta.long {
+  background: var(--long) !important;
+  color: var(--bg) !important;
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.3);
+}
+.keeper-btn {
+  background: var(--bg-3) !important;
+  color: var(--paper-dim) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+}
+.keeper-btn:hover { color: var(--accent) !important; border-color: var(--accent) !important; }
+
+/* HF badges */
+.hf {
+  font-family: var(--mono) !important;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 12px;
+}
+.hf.healthy { color: var(--long) !important; background: rgba(16, 185, 129, 0.1); }
+.hf.warning { color: var(--warning) !important; background: rgba(245, 158, 11, 0.1); }
+.hf.danger  { color: var(--short) !important; background: rgba(239, 68, 68, 0.1); }
+
+/* Section heads in trade */
+.section-header h2, .sec-head h3 {
+  font-family: var(--display) !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  letter-spacing: 0 !important;
+}
+.sec-head em { color: var(--accent); font-style: normal; }
+
+/* Stats / market strip */
+.market-strip {
+  background: var(--line) !important;
+  border-radius: 14px !important;
+  overflow: hidden;
+}
+.mkt-cell { background: var(--bg-3) !important; }
+.mkt-symbol .mkt-label { color: var(--accent) !important; }
+.status-dot.active { background: var(--long) !important; box-shadow: 0 0 8px var(--long); }
+
+/* Toasts */
+.toast {
+  background: var(--bg-3) !important;
+  color: var(--paper) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.5) !important;
+}
+.toast.success { border-left: 3px solid var(--long) !important; }
+.toast.error   { border-left: 3px solid var(--short) !important; }
+.toast.info    { border-left: 3px solid var(--accent) !important; }
+.tx-link { color: var(--accent) !important; }
+
+/* Death switch / warning panels */
+#death-switch-panel, #mark-warn, #oracle-warn {
+  background: var(--bg-3) !important;
+  border-radius: 12px !important;
+  font-family: var(--mono) !important;
+  font-size: 12px !important;
+}
+
+/* App nav (when in trade view) — purple-accent */
+.app-nav {
+  background: rgba(5, 5, 5, 0.7) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--line) !important;
+}
+
+/* Responsive */
+@media (max-width: 980px) {
+  .p-hero-inner, .p-grid-3, .p-how-grid, .p-footer-inner, .p-footer-links {
+    grid-template-columns: 1fr !important;
+  }
+  .p-specs-grid { grid-template-columns: 1fr !important; }
+  .p-spec { border-right: none !important; }
+  .p-nav, .p-hero, .p-section, .p-footer { padding-left: 24px; padding-right: 24px; }
+  .p-nav-links { display: none; }
+  .p-hero-orb { width: 280px; height: 280px; margin: 0 auto; }
+}
+
+
+/* ━━━ Trade-as-default polish ━━━ */
+body { background: var(--bg); min-height: 100vh; }
+#appView, .trade-view, [id="appView"] { display: block !important; }
+
+/* New combined nav inside trade view */
+.p-logo-img {
+  height: 32px; width: 32px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.p-nav-meta {
+  display: flex; gap: 10px; flex: 1; justify-content: center;
+  align-items: center;
+}
+.p-meta-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: var(--paper-dim);
+  text-decoration: none;
+  font-size: 12px;
+  font-family: var(--mono);
+  transition: border-color 0.15s, color 0.15s;
+}
+.p-meta-pill:hover { border-color: var(--accent); color: var(--paper); }
+.p-meta-l { color: var(--paper-faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+.p-meta-v { color: var(--paper); font-family: var(--mono); }
+.p-meta-pill svg { color: var(--accent); }
+
+.p-nav-right {
+  display: flex; gap: 10px; align-items: center;
+}
+.p-net-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-dim);
+}
+.p-net-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--paper-faint);
+}
+.p-net-pill.connected { border-color: var(--long); color: var(--long); }
+.p-net-pill.connected .p-net-dot { background: var(--long); box-shadow: 0 0 8px var(--long); }
+.p-net-pill.idle .p-net-dot { background: var(--warn); }
+
+/* Banner strip */
+.p-banner {
+  width: 100%;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.p-banner-img {
+  width: 100%;
+  max-width: 1920px;
+  height: auto;
+  display: block;
+}
+.p-banner::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 60px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .p-nav { padding: 16px 20px; flex-wrap: wrap; gap: 12px; }
+  .p-nav-meta { display: none; }
+  .p-banner-img { max-height: 120px; }
+}
+
+/* Trade grid layout: tighten spacing */
+#trade-grid {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 24px;
+  gap: 20px !important;
+}
+
+/* Restyle col panels */
+.col-left, .col-mid, .col-right {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 16px !important;
+  padding: 20px !important;
+}
+
+/* Burn vault — make purple-themed and smaller */
+.burn-vault {
+  max-width: 1320px;
+  margin: 20px auto 0;
+  padding: 0 24px;
+}
+.burn-vault > div {
+  background: var(--bg-3) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 16px !important;
+}
+
+/* Old explainer section — hide to focus on trading */
+.explainer { display: none !important; }
+
+/* Banners */
+.banner, #paused-banner, #preinit-banner, #oracle-warn, #mark-warn, #death-switch-panel {
+  border-radius: 12px !important;
+  margin: 12px 24px !important;
+  background: var(--bg-3) !important;
+  font-family: var(--mono) !important;
+  font-size: 13px !important;
+}
+
+/* Make body padding work with sticky nav */
+body.app-active { padding-top: 0; }
+
+/* Connect button - purple accent */
+#connectBtn {
+  padding: 10px 18px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  border-radius: 999px !important;
+}
+
+
+/* Position card header with ID badge */
+.pos-head-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.pos-id-badge {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(168, 85, 247, 0.12);
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  user-select: all;
+}
+.pos-id-badge:hover {
+  background: rgba(168, 85, 247, 0.2);
+}
+.pos-source {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--paper-faint);
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--bg-soft);
+}
+.pos-source.spot { color: var(--long); background: rgba(16, 185, 129, 0.08); }
+.pos-source.twap { color: var(--accent); background: rgba(168, 85, 247, 0.08); }
+.pos-source.stale, .pos-source.raw { color: var(--warn); background: rgba(245, 158, 11, 0.08); }
+
+
+/* ━━━ Q-style font polish ━━━ */
+body, button, input, select {
+  font-family: var(--display) !important;
+  letter-spacing: -0.005em;
+}
+.p-brand, .p-brand span {
+  font-family: var(--display-q) !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.02em;
+}
+h1, h2, h3, .section-header h2, .sec-head h3 {
+  font-family: var(--display-q) !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.015em !important;
+}
+.p-cta, .p-cta-big, button {
+  font-family: var(--display-q) !important;
+  font-weight: 600 !important;
+}
+.mono, .v, [class*="num"], code, kbd, .pos-id-badge {
+  font-family: var(--mono) !important;
+}
+/* Soften corners site-wide — Q vibe */
+.p-cta, .p-cta-big, .pos-card, .stat-card, .col-left, .col-mid, .col-right,
+input, button, .keeper-btn, .toast, .p-meta-pill, .p-net-pill,
+#mark-warn, #oracle-warn, #death-switch-panel, .market-strip, .mkt-cell {
+  border-radius: 14px !important;
+}
+input { border-radius: 12px !important; }
+.pos-id-badge, .side.long, .side.short, .pos-source, .hf {
+  border-radius: 8px !important;
+}
+
+/* ━━━ NEW Deflation panel (replaces burn-vault) ━━━ */
+.defl-panel {
+  max-width: 1320px;
+  margin: 20px auto 0;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 14px;
+}
+.defl-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+.defl-card-wide { padding: 16px 22px; }
+.defl-card-btn {
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+  min-width: 180px;
+}
+.defl-label {
+  font-family: var(--display);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--paper-faint);
+  font-weight: 600;
+}
+.defl-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.defl-unit {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+}
+.defl-sub {
+  font-size: 11px;
+  color: var(--paper-dim);
+}
+.defl-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.defl-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.defl-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  border-radius: 999px;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.defl-thresh {
+  font-size: 11px;
+  color: var(--paper-faint);
+  white-space: nowrap;
+}
+.defl-btn {
+  padding: 12px 18px !important;
+  font-size: 13px !important;
+  border-radius: 999px !important;
+}
+.defl-btn:disabled {
+  background: var(--bg-3) !important;
+  color: var(--paper-faint) !important;
+  cursor: not-allowed;
+  box-shadow: none !important;
+}
+.defl-reward {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--paper-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+@media (max-width: 900px) {
+  .defl-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Old burn-vault — hide if any leftover */
+.burn-vault { display: none !important; }
+
+/* ━━━ Connect button always works ━━━ */
+#connectBtn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)) !important;
+  color: white !important;
+  border: none !important;
+  padding: 10px 18px !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  border-radius: 999px !important;
+  cursor: pointer;
+  box-shadow: 0 4px 18px var(--accent-glow);
+}
+#connectBtn:hover { transform: translateY(-1px); }
+
+/* When no CA set, show banner */
+.no-contract-warn {
+  max-width: 1320px;
+  margin: 20px auto 0;
+  padding: 14px 22px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--display);
+  font-size: 13px;
+  color: var(--warn);
+}
+.no-contract-warn code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg-2);
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--paper);
+}
+
+</style>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+<div id="landingView">
+
+<!-- ─────── TOP NAV ─────── -->
+<script>
+  // gentle reveal on scroll
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }});
+  }, { threshold: 0.08 });
+  document.querySelectorAll('section, header.hero, .cta-strip').forEach(el => {
+    el.classList.add('reveal');
+    io.observe(el);
+  });
+</script>
+
+</div><!-- /landingView -->
+
+<!-- ════════════════════════════════════════════════════════════════════
+     APP VIEW · trading interface (hidden until launchApp() called)
+     ════════════════════════════════════════════════════════════════════ -->
+<div id="appView" style="display:block">
+
+<!-- ─────── APP NAV ─────── -->
+<nav class="p-nav">
+  <a href="https://x.com/perpsuniv4" target="_blank" rel="noopener" class="p-brand" title="@perpsV4 on X">
+    <img src="./logo.png" alt="perps." class="p-logo-img" onerror="this.style.display='none'">
+    <span>perps<span class="dot">.</span></span>
+  </a>
+  <div class="p-nav-meta">
+    <a href="#" id="contractLink" target="_blank" class="p-meta-pill" title="contract on Etherscan">
+      <span class="p-meta-l">contract</span>
+      <span class="p-meta-v" id="contractAddrShort">—</span>
+    </a>
+    <a href="https://x.com/perpsuniv4" target="_blank" rel="noopener" class="p-meta-pill" title="@perpsV4">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      <span class="p-meta-v">@perpsV4</span>
+    </a>
+  </div>
+  <div class="p-nav-right">
+    <div class="p-net-pill idle" id="netPill"><span class="p-net-dot"></span><span id="netLabel">not connected</span></div>
+    <button class="p-cta" id="connectBtn">Connect Wallet</button>
+  </div>
+</nav>
+
+<!-- ━━━ BANNER STRIP (./banner.png) ━━━ -->
+<div class="p-banner">
+  <img src="./banner.png" alt="perps Uniswap v4 hook" class="p-banner-img" onerror="this.parentElement.style.display='none'">
+</div>
+<!-- ─── NO CONTRACT WARN (shows when CA=0x0..0) ─── -->
+<div class="no-contract-warn" id="noContractWarn" style="display:none">
+  <span>⚠</span>
+  <span>Contract address not set yet. Edit <code>CONFIG.COIL_ADDRESS</code> in the HTML to start trading.</span>
+</div>
+
+
+<!-- ─── BANNERS ─── -->
+<div id="paused-banner" class="banner paused hidden">
+  <span class="pulse-dot"></span>
+  ⚠️ Contract paused by governance — trading disabled
+</div>
+
+<!-- ─────── LIVE TICKER ─────── -->
+<div class="app-ticker">
+  <div class="app-ticker-item">
+    <div class="l">mark · twap</div>
+    <div class="v" id="t-mark">—</div>
+  </div>
+  <div class="app-ticker-item">
+    <div class="l">funding · 1h</div>
+    <div class="v" id="t-funding">—</div>
+  </div>
+  <div class="app-ticker-item">
+    <div class="l">long oi</div>
+    <div class="v up" id="t-loi">—</div>
+  </div>
+  <div class="app-ticker-item">
+    <div class="l">short oi</div>
+    <div class="v down" id="t-soi">—</div>
+  </div>
+  <div class="app-ticker-item">
+    <div class="l">treasury</div>
+    <div class="v" id="t-treasury">—</div>
+  </div>
+  <div class="app-ticker-item">
+    <div class="l">insurance</div>
+    <div class="v" id="t-insurance">—</div>
+  </div>
+</div>
+
+<!-- ─── DEFLATION PANEL ─── -->
+<section class="defl-panel">
+  <div class="defl-card">
+    <div class="defl-label">Total burned</div>
+    <div class="defl-value mono" id="bv-total">— <span class="defl-unit">PERPS</span></div>
+    <div class="defl-sub mono" id="bv-pct">—% of supply</div>
+  </div>
+  <div class="defl-card defl-card-wide">
+    <div class="defl-label">Pending buyback</div>
+    <div class="defl-row">
+      <div class="defl-value mono" id="bv-pending-eth">0 ETH</div>
+      <div class="defl-bar">
+        <div class="defl-bar-fill" id="bv-fill" style="width:0%"></div>
+      </div>
+      <div class="defl-thresh mono">threshold 0.05 ETH</div>
+    </div>
+  </div>
+  <div class="defl-card defl-card-btn">
+    <button class="p-cta defl-btn" id="burnBtn" onclick="triggerBurn()" disabled>Trigger burn</button>
+    <div class="defl-reward">caller reward 0.1%</div>
+  </div>
+</section>
+
+<!-- ─────── TRADING GRID ─────── -->
+<main id="trade-grid">
+
+  <aside class="col-left">
+    <div class="sec-head">
+      <h3>Open <em>position</em></h3>
+      <span class="sub">virtual perp</span>
+    </div>
+
+    <div class="how-it-works">
+      <div class="hiw-line"><span class="hiw-dot">①</span><span>Pick direction & leverage</span></div>
+      <div class="hiw-line"><span class="hiw-dot">②</span><span>ETH collateral sent <b>with</b> open tx — no deposit step</span></div>
+      <div class="hiw-line"><span class="hiw-dot">③</span><span>Filled instantly at TWAP — no orderbook</span></div>
+    </div>
+    <div id="mark-warn" style="display:none; border-left:2px solid var(--short); padding:10px 14px; margin-bottom:18px; background:rgba(255,107,107,0.06); font-family:var(--mono); font-size:11px; color:var(--short); line-height:1.55;">
+      ⛔ <b>Mark price not loaded</b> — opening now would create a <b>stuck position</b> (collateral lost). Wait for stats to populate or sync TWAP.
+    </div>
+
+    <div class="dir-toggle">
+      <button class="dir-btn long active" data-dir="long" onclick="setDir('long')">Long</button>
+      <button class="dir-btn short" data-dir="short" onclick="setDir('short')">Short</button>
+    </div>
+
+    <div class="field">
+      <label>
+        <span>Collateral</span>
+        <span class="max" onclick="setMaxCollateral()">max</span>
+      </label>
+      <div class="input-wrap">
+        <input id="collateral-in" type="number" min="0.01" step="0.01" placeholder="0.10" oninput="recalc()">
+        <span class="denom">ETH</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>
+        <span>Leverage</span>
+        <span id="lev-info" style="color:var(--paper-dim)">5×</span>
+      </label>
+      <div class="lev-row">
+        <div class="lev-display"><span id="lev-num">5</span><small>×</small></div>
+        <input id="lev-slider" type="range" min="1" max="10" step="0.5" value="5" oninput="recalc()">
+      </div>
+    </div>
+
+    <div class="preview" id="preview">
+      <div class="preview-row"><span>Notional</span><b id="pv-notional">— ETH</b></div>
+      <div class="preview-row"><span>Position size</span><b id="pv-size">— PERPS</b></div>
+      <div class="preview-row"><span>Open fee · 0.5%</span><b id="pv-fee">— ETH</b></div>
+      <div class="preview-row"><span>Entry (mark)</span><b id="pv-entry">— PERPS/ETH</b></div>
+      <div class="preview-row"><span>Liq. price approx.</span><b id="pv-liq">—</b></div>
+      <div class="preview-row"><span>Max leverage</span><b>10×</b></div>
+    </div>
+
+    <button class="open-btn cta long" id="openBtn" onclick="openPosition()" disabled>
+      Connect wallet to trade
+    </button>
+  </aside>
+
+  <section class="col-mid">
+    <div class="sec-head">
+      <h3>Your <em>positions</em></h3>
+      <span class="sub" id="pos-count">0 open</span>
+    </div>
+    <!-- ━━━ v0.2 Death Switch Panel ━━━ -->
+    <div id="death-switch-panel" style="display:none; margin-bottom:14px; padding:12px 14px; border:1px dashed var(--short); background:rgba(255,107,107,0.04); font-family:var(--mono); font-size:11px; line-height:1.55;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <div>
+          <b style="color:var(--short)">💀 Death Switch</b> ·
+          <span id="ds-countdown" style="color:var(--paper-dim)">checking...</span>
+        </div>
+        <button id="ds-trigger-btn" class="cta short" style="display:none; padding:6px 12px; font-size:11px;" onclick="triggerDeathSwitch()">Activate (burn all ETH → COIL)</button>
+      </div>
+      <div id="ds-detail" style="margin-top:8px; color:var(--paper-faint); font-size:10px;"></div>
+    </div>
+
+    <div id="oracle-warn" style="display:none; padding:10px 14px; margin-bottom:14px; border-left:2px solid var(--warn); background:rgba(255,184,107,0.06); font-family:var(--mono); font-size:11.5px; color:var(--paper-dim); line-height:1.55;">
+      <b style="color:var(--warn)">⚠ Oracle stale</b> — Positions might show "—" for PnL/health.
+      Last swap > 60s ago, so getPositionView reverts.
+      <button class="keeper-btn" style="margin-top:8px; display:inline-block; padding:6px 12px;" onclick="keeperSyncObs()">↻ Sync TWAP now</button>
+    </div>
+
+    <!-- Data source legend -->
+    <div style="margin-bottom:14px; padding:8px 12px; border-left:2px solid var(--accent); background:rgba(125,249,255,0.04); font-family:var(--mono); font-size:10px; color:var(--paper-faint); line-height:1.6;">
+      <b style="color:var(--accent)">·spot</b> = real-time PnL from V4 PoolManager (always available)<br>
+      <b style="color:var(--paper-dim)">·stale</b> = oracle frozen, raw data only — click <b>↻ Sync TWAP</b> to refresh
+    </div>
+
+    <!-- Emergency find-by-id panel -->
+    <details style="margin-bottom:16px; padding:10px 14px; border:1px dashed var(--line-strong); border-radius:4px; font-family:var(--mono); font-size:11.5px;">
+      <summary style="cursor:pointer; color:var(--paper-dim);">🔧 Lookup position by ID (emergency)</summary>
+      <div style="padding-top:10px;">
+        <div style="color:var(--paper-faint); margin-bottom:10px;">
+          Position list filter has bugs in v0.1. If your position isn't showing, look it up by ID manually.
+          Find your ID in the tx receipt (PositionOpened event) or guess (usually 1, 2, 3...).
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="lookup-id" type="number" min="1" placeholder="position id" style="flex:1; padding:8px 10px; background:var(--bg-3); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:var(--mono); font-size:12px;">
+          <button class="keeper-btn" onclick="lookupPosition()">Lookup</button>
+          <button class="cta short" style="font-size:11px; padding:8px 12px;" onclick="lookupClose()">Force Close</button>
+        </div>
+        <div id="lookup-result" style="margin-top:10px; color:var(--paper-dim);"></div>
+      </div>
+    </details>
+
+    <div class="pos-list" id="pos-list">
+      <div class="pos-empty">
+        no open positions
+        <small>open one on the left</small>
+      </div>
+    </div>
+
+    <!-- ─── ALL OPEN POSITIONS (public) ─── -->
+    <div class="liq-section" style="border-top-style:solid; border-color: var(--line);">
+      <div class="sec-head">
+        <h3>All open <em>positions</em></h3>
+        <span class="sub" id="all-count">— total</span>
+      </div>
+      <div style="font-family:var(--mono); font-size:11px; color:var(--paper-faint); margin-bottom:14px; line-height:1.6;">
+        Public view — everyone's positions. Yours are highlighted in cyan, others in white.
+      </div>
+      <div class="pos-list" id="all-pos-list">
+        <div class="pos-empty">no positions yet<small>be the first</small></div>
+      </div>
+    </div>
+
+    <!-- ─── LIQUIDATOR PANEL ─── -->
+    <div class="liq-section">
+      <div class="sec-head">
+        <h3>Liquidatable<em> positions</em><span class="danger-tag">earn 5%</span></h3>
+        <span class="sub" id="liq-count">0 liquidatable</span>
+      </div>
+      <div style="font-family:var(--mono); font-size:11px; color:var(--paper-faint); margin-bottom:14px; line-height:1.6;">
+        Anyone can liquidate. The keeper receives <b style="color:var(--long)">5% of remaining collateral</b> as bounty.
+        Sorted by health factor — lowest first.
+      </div>
+      <div class="pos-list" id="liq-list">
+        <div class="pos-empty">
+          no liquidatable positions
+          <small>all positions healthy</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="col-right">
+    <div class="sec-head">
+      <h3>Pool <em>stats</em></h3>
+      <span class="sub">live</span>
+    </div>
+
+    <div class="stat-block">
+      <h4>Mark · 5-min TWAP</h4>
+      <div class="big-stat accent" id="s-mark">—</div>
+      <div style="font-family:var(--mono); font-size:11px; color:var(--paper-faint); margin-top:6px">
+        tick <span id="s-tick" style="color:var(--paper-dim)">—</span>
+      </div>
+    </div>
+
+    <div class="stat-block">
+      <h4>OI imbalance</h4>
+      <div class="oi-bar">
+        <div class="oi-long-fill" id="oi-bar-long" style="width:50%"></div>
+        <div class="oi-short-fill" id="oi-bar-short" style="width:50%"></div>
+      </div>
+      <div class="oi-labels">
+        <span class="l" id="oi-l-pct">— %</span>
+        <span class="s" id="oi-s-pct">— %</span>
+      </div>
+      <div style="margin-top:14px; font-family:var(--mono); font-size:11.5px; color:var(--paper-dim);">
+        Long: <b style="color:var(--long)" id="oi-l-abs">—</b><br>
+        Short: <b style="color:var(--short)" id="oi-s-abs">—</b>
+      </div>
+    </div>
+
+    <div class="stat-block">
+      <h4>Funding rate</h4>
+      <div class="big-stat" id="s-funding">—</div>
+      <div style="font-family:var(--mono); font-size:11px; color:var(--paper-faint); margin-top:6px" id="s-funding-dir">—</div>
+    </div>
+
+    <div class="stat-block">
+      <h4>4-bucket split (live)</h4>
+      <div style="font-family:var(--mono); font-size:12.5px; line-height:2">
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">POL · ETH</span><b id="b-pol">—</b></div>
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">POL · PERPS</span><b id="b-polcoil">—</b></div>
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">Treasury</span><b id="b-treasury">—</b></div>
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">Buyback queue</span><b style="color:var(--warn)" id="b-buyback">—</b></div>
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">Insurance</span><b id="b-insurance">—</b></div>
+      </div>
+    </div>
+
+    <div class="stat-block">
+      <h4>Your portfolio</h4>
+      <div style="font-family:var(--mono); font-size:12.5px; line-height:2">
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">ETH balance</span><b id="my-eth">—</b></div>
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">COIL balance</span><b id="my-coil">—</b></div>
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">Open OI</span><b id="my-oi">—</b></div>
+      </div>
+    </div>
+
+    <div class="stat-block">
+      <h4>Protocol params</h4>
+      <div style="font-family:var(--mono); font-size:12.5px; line-height:2">
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">Swap tax</span><b id="p-tax">—</b></div>
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">Funding k</span><b id="p-k">—</b></div>
+        <div style="display:flex; justify-content:space-between"><span style="color:var(--paper-dim)">Status</span><b id="p-status">—</b></div>
+      </div>
+    </div>
+
+    <div class="stat-block">
+      <h4>Keeper actions</h4>
+      <div style="font-family:var(--mono); font-size:11px; color:var(--paper-faint); line-height:1.55; margin-bottom:10px">
+        Anyone can call. Refreshes on-chain state.
+      </div>
+      <div class="keeper-grid">
+        <button class="keeper-btn" id="syncFundingBtn" onclick="keeperSyncFunding()" disabled>↻ funding</button>
+        <button class="keeper-btn" id="syncObsBtn" onclick="keeperSyncObs()" disabled>↻ TWAP</button>
+      </div>
+    </div>
+  </aside>
+
+</main>
+
+<!-- ─────── COMPARE TABLE ─────── -->
+<section class="explainer">
+  <h2>No orderbook. No deposit. <em>Just one tx.</em></h2>
+  <p class="lede">Familiar with dYdX or Hyperliquid? Coil works differently. There's no margin account to deposit into, no orderbook of limit orders. Your ETH collateral ships with the open-tx itself, and the position fills instantly at the pool's TWAP.</p>
+
+  <div class="compare-table">
+    <div class="ct-row ct-head">
+      <div></div>
+      <div>orderbook<br><small>dYdX, Hyperliquid</small></div>
+      <div>vault model<br><small>GMX, Gains</small></div>
+      <div class="ct-self">Coil</div>
+    </div>
+    <div class="ct-row">
+      <div class="ct-label">Order types</div>
+      <div>market / limit / stop</div>
+      <div>market only</div>
+      <div class="ct-self">market only · TWAP</div>
+    </div>
+    <div class="ct-row">
+      <div class="ct-label">Deposit step</div>
+      <div>required</div>
+      <div>required</div>
+      <div class="ct-self">none · sent with open</div>
+    </div>
+    <div class="ct-row">
+      <div class="ct-label">Mark price source</div>
+      <div>orderbook midprice</div>
+      <div>Chainlink oracle</div>
+      <div class="ct-self">pool's own TWAP</div>
+    </div>
+    <div class="ct-row">
+      <div class="ct-label">Counterparty</div>
+      <div>opposing trader</div>
+      <div>LP vault</div>
+      <div class="ct-self">OI imbalance + insurance (10% of fees)</div>
+    </div>
+    <div class="ct-row">
+      <div class="ct-label">Steps to open</div>
+      <div>2 (deposit → order)</div>
+      <div>2 (deposit → order)</div>
+      <div class="ct-self">1 · just sign</div>
+    </div>
+    <div class="ct-row">
+      <div class="ct-label">Liquidation impact</div>
+      <div>dumps into book</div>
+      <div>dumps into pool</div>
+      <div class="ct-self">none · bookkeeping</div>
+    </div>
+  </div>
+</section>
+
+<div id="toast-wrap"></div>
+
+</div><!-- /appView -->
+
+
+<script>
+
+// ────────────────────────────────────────────────────────────────────
+// View toggle: landing ↔ app
+// ────────────────────────────────────────────────────────────────────
+function launchApp() {
+  // (no-op now — app is always shown by default)
+  if (typeof refreshAll === 'function') refreshAll();
+}
+
+function goHome() { /* no-op now */ }
+
+// App always visible; just kick off polling
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.classList.add('app-active');
+  if (typeof refreshAll === 'function') refreshAll();
+});
+
+// CONFIG — fill in after deploy
+// ────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  COIL_ADDRESS:   "0x0000000000000000000000000000000000000000",  // ⚠ TODO: 部署 v0.2 后改成真实地址 (低 14 bits = 0x2EC4)
+  CHAIN_ID:       1,
+  CHAIN_NAME:     "ethereum",
+  RPC_FALLBACK:   "https://eth.llamarpc.com",
+  EXPLORER:       "https://etherscan.io",
+};
+
+const COIL_ABI = [
+  // ERC20
+  "function balanceOf(address) view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
+  "function symbol() view returns (string)",
+  // Perp
+  "function openPosition(bool isLong, uint128 sizeCoil) payable returns (uint256)",
+  "function closePosition(uint256 id)",
+  "function liquidate(uint256 id)",
+  "function getPosition(uint256) view returns (tuple(address owner, bool isLong, uint128 collateral, uint128 size, int24 entryTick, int256 entryFundingIndex, uint32 openBlock, uint32 lastUpdate))",
+  "function getPositionView(uint256 id) view returns (address owner, bool isLong, uint128 collateral, uint128 size, int24 entryTick, int24 currentTick, int256 unrealizedPnl, int256 fundingPay, int256 collateralAfter, uint256 maintReq, int256 healthFactor)",
+  "function getMarkTick() view returns (int24)",
+  "function getHealthFactor(uint256) view returns (int256)",
+  "function nextPositionId() view returns (uint256)",
+  // State
+  "function totalLongOi() view returns (uint256)",
+  "function totalShortOi() view returns (uint256)",
+  "function userOpenOi(address) view returns (uint256)",
+  "function treasuryEth() view returns (uint256)",
+  "function insuranceEth() view returns (uint256)",
+  "function polEth() view returns (uint256)",
+  "function polCoil() view returns (uint256)",
+  "function fundingIndexLong() view returns (int256)",
+  "function fundingIndexShort() view returns (int256)",
+  "function funding_k() view returns (uint256)",
+  "function swapTaxBps() view returns (uint256)",
+  "function paused() view returns (bool)",
+  // Keeper functions
+  "function syncFunding()",
+  "function syncObservation()",
+  // Buyback & burn
+  "function buybackAndBurn() returns (uint256)",
+  "function buybackEth() view returns (uint256)",
+  "function totalBurned() view returns (uint256)",
+  "function MIN_BUYBACK_ETH() view returns (uint256)",
+  "function BUYBACK_CALLER_REWARD_BPS() view returns (uint256)",
+  // ━ v0.2 additions ━
+  "function activateDeathSwitch()",
+  "function recoverDeadPosition(uint256 id)",
+  "function treasuryWithdraw(uint256 amount, address to)",
+  "function transferGovernance(address newGov)",
+  "function getCurrentSpotTick() view returns (int24)",
+  "function lastSwapTimestamp() view returns (uint256)",
+  "function deathSwitchActivated() view returns (bool)",
+  "function DEATH_INACTIVITY() view returns (uint256)",
+  "function MIN_HOLD_BLOCKS() view returns (uint32)",
+  // v0.2 errors
+  "error Coil_PositionTooYoung()",
+  "error Coil_StillAlive()",
+  "error Coil_DeathSwitchActive()",
+  "error Coil_NoFunds()",
+  "error Coil_Insolvent()",
+  // v0.2 events
+  "event DeathSwitchActivated(uint256 totalEth, uint256 coilBurned, address indexed triggeredBy)",
+  "event DeadPositionRecovered(uint256 indexed id, address indexed owner, uint256 collateral)",
+  "event TreasuryWithdrawn(uint256 amount, address indexed to)",
+  "event GovernanceTransferred(address indexed prev, address indexed next)",
+  // Events
+  "event PositionOpened(uint256 indexed id, address indexed owner, bool isLong, uint128 collateral, uint128 size, int24 entryTick)",
+  "event PositionClosed(uint256 indexed id, address indexed owner, int256 pnl, int256 funding, int256 net)",
+  "event PositionLiquidated(uint256 indexed id, address indexed owner, address indexed keeper, uint256 bounty, uint256 backToOwner)",
+  "event BuybackAndBurn(uint256 ethSpent, uint256 coilBurned, uint256 callerReward, address indexed caller)",
+];
+
+// ────────────────────────────────────────────────────────────────────
+// State
+// ────────────────────────────────────────────────────────────────────
+let provider = null, signer = null, account = null;
+let readOnly = null, coilWrite = null, coilRead = null;
+let currentDir = 'long';
+let currentMarkPriceX18 = 0n;
+let currentMarkTick = 0;
+let myPositions = [];
+let allPositions = [];
+let pollTimer = null;
+
+// ────────────────────────────────────────────────────────────────────
+// Init
+// ────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  readOnly = new ethers.JsonRpcProvider(CONFIG.RPC_FALLBACK);
+  const hasCA = CONFIG.COIL_ADDRESS !== "0x0000000000000000000000000000000000000000";
+  if (hasCA) {
+    coilRead = new ethers.Contract(CONFIG.COIL_ADDRESS, COIL_ABI, readOnly);
+  } else {
+    const warn = document.getElementById('noContractWarn');
+    if (warn) warn.style.display = 'flex';
+    // Disable open button until CA is set
+    const openBtn = document.getElementById('openBtn');
+    if (openBtn) { openBtn.disabled = true; openBtn.textContent = 'Fill CA first'; }
+  }
+  setupTickerPlaceholders();
+  refreshAll();
+  pollTimer = setInterval(refreshAll, 15_000);
+
+  if (window.ethereum) {
+    window.ethereum.on?.('accountsChanged', () => location.reload());
+    window.ethereum.on?.('chainChanged', () => location.reload());
+  }
+});
+
+function setupTickerPlaceholders() {
+  ['t-mark','t-funding','t-loi','t-soi','t-treasury','t-insurance'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Wallet
+// ────────────────────────────────────────────────────────────────────
+// Robust connect button wiring
+window.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('connectBtn');
+  if (!btn) {
+    console.error('[perps] connectBtn not found in DOM');
+    return;
+  }
+  btn.addEventListener('click', () => {
+    connectWallet().catch(e => {
+      console.error('[perps] connect error:', e);
+      toast('Connect error: ' + (e.shortMessage || e.message || String(e)), 'error');
+    });
+  });
+  console.log('[perps] connect button wired');
+});
+
+async function connectWallet() {
+  console.log('[perps] connectWallet called');
+  if (!window.ethereum) {
+    console.error('[perps] window.ethereum is undefined');
+    return toast('No injected wallet found. Install MetaMask, Rabby, or similar.', 'error');
+  }
+  console.log('[perps] window.ethereum found:', !!window.ethereum);
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    account = accounts[0];
+    provider = new ethers.BrowserProvider(window.ethereum);
+
+    const net = await provider.getNetwork();
+    if (Number(net.chainId) !== CONFIG.CHAIN_ID) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x' + CONFIG.CHAIN_ID.toString(16) }]
+        });
+      } catch(switchErr) {
+        toast('Connected on wrong network — switch to ' + CONFIG.CHAIN_NAME + ' to trade.', 'info');
+      }
+    }
+
+    signer = await provider.getSigner();
+    const hasContract = CONFIG.COIL_ADDRESS !== "0x0000000000000000000000000000000000000000";
+
+    if (hasContract) {
+      coilWrite = new ethers.Contract(CONFIG.COIL_ADDRESS, COIL_ABI, signer);
+      coilRead = coilWrite;
+    }
+
+    const cbtn = document.getElementById('connectBtn');
+    if (cbtn) {
+      cbtn.textContent = account.slice(0,6) + '…' + account.slice(-4);
+      cbtn.onclick = disconnectWallet;
+    }
+    const np = document.getElementById('netPill');
+    if (np) np.classList.remove('idle');
+    if (np) np.classList.add('connected');
+    const nl = document.getElementById('netLabel');
+    if (nl) nl.textContent = hasContract ? CONFIG.CHAIN_NAME : CONFIG.CHAIN_NAME + ' · no contract';
+
+    if (hasContract) {
+      const ob = document.getElementById('openBtn');
+      if (ob) {
+        ob.disabled = false;
+        ob.textContent = 'Open ' + (currentDir === 'long' ? 'Long' : 'Short');
+      }
+      const sf = document.getElementById('syncFundingBtn'); if (sf) sf.disabled = false;
+      const so = document.getElementById('syncObsBtn'); if (so) so.disabled = false;
+      toast('Wallet connected: <b>' + account.slice(0,6) + '…' + account.slice(-4) + '</b>', 'success');
+    } else {
+      const ob = document.getElementById('openBtn');
+      if (ob) ob.textContent = 'Fill CA first';
+      toast('Connected. <b>Contract address not set</b> — fill CONFIG.COIL_ADDRESS.', 'info');
+    }
+
+    refreshAll();
+  } catch (e) {
+    toast('Connect failed: ' + (e.shortMessage || e.message || String(e)), 'error');
+  }
+}
+
+function disconnectWallet() {
+  account = null; signer = null; coilWrite = null;
+  document.getElementById('connectBtn').textContent = 'connect wallet';
+  // Robust connect button wiring
+window.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('connectBtn');
+  if (!btn) {
+    console.error('[perps] connectBtn not found in DOM');
+    return;
+  }
+  btn.addEventListener('click', () => {
+    connectWallet().catch(e => {
+      console.error('[perps] connect error:', e);
+      toast('Connect error: ' + (e.shortMessage || e.message || String(e)), 'error');
+    });
+  });
+  console.log('[perps] connect button wired');
+});
+  const np = document.getElementById('netPill');
+  if (np) { np.classList.add('idle'); np.classList.remove('connected'); }
+  const nl = document.getElementById('netLabel');
+  if (nl) nl.textContent = 'not connected';
+  const ob = document.getElementById('openBtn');
+  if (ob) { ob.disabled = true; ob.textContent = 'Connect wallet to trade'; }
+  const sf = document.getElementById('syncFundingBtn'); if (sf) sf.disabled = true;
+  const so = document.getElementById('syncObsBtn'); if (so) so.disabled = true;
+  myPositions = [];
+  liquidatable = [];
+  renderPositions();
+  renderLiquidatable();
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Refresh loop
+// ────────────────────────────────────────────────────────────────────
+async function refreshAll() {
+  if (!coilRead) {
+    populateDemoData();
+    refreshDeathSwitch();
+    refreshMarketStrip();
+    return;
+  }
+  try {
+    await Promise.all([
+      refreshStats(),
+      refreshMyPositions(),
+      refreshLiquidatable(),
+      checkPaused()
+    ]);
+    recalc();
+  } catch (e) {
+    console.error('refresh error', e);
+  }
+  refreshDeathSwitch();
+  refreshMarketStrip();
+}
+
+async function checkPaused() {
+  try {
+    const isPaused = await coilRead.paused();
+    const pb = document.getElementById('paused-banner');
+    if (pb) pb.classList.toggle('hidden', !isPaused);
+    const ps = document.getElementById('p-status');
+    if (ps) {
+      ps.textContent = isPaused ? 'PAUSED' : 'live';
+      ps.style.color = isPaused ? 'var(--short)' : 'var(--long)';
+    }
+    const ob = document.getElementById('openBtn');
+    if (ob) {
+      ob.disabled = isPaused || !account;
+      if (isPaused) ob.textContent = 'Trading paused';
+    }
+  } catch {}
+}
+
+function populateDemoData() {
+  // No demo / fake data. If contract isn't deployed yet, all stats stay "—".
+  // Set zero state so the trade preview math doesn't blow up.
+  currentMarkPriceX18 = 0n;
+  currentMarkTick = 0;
+}
+
+async function refreshStats() {
+  try {
+    const [markTick, loi, soi, tEth, iEth, pEth, pCoil, fk, burned, pending, totalSupply, minBuyback] = await Promise.all([
+      coilRead.getMarkTick().catch(() => 0),
+      coilRead.totalLongOi(),
+      coilRead.totalShortOi(),
+      coilRead.treasuryEth(),
+      coilRead.insuranceEth(),
+      coilRead.polEth(),
+      coilRead.polCoil(),
+      coilRead.funding_k(),
+      coilRead.totalBurned().catch(() => 0n),
+      coilRead.buybackEth().catch(() => 0n),
+      coilRead.totalSupply().catch(() => 1_000_000_000n * (10n ** 18n)),
+      coilRead.MIN_BUYBACK_ETH().catch(() => ethers.parseEther('0.05')),
+    ]);
+    // Pull params for sidebar
+    try {
+      const [tax, fk2] = await Promise.all([
+        coilRead.swapTaxBps(),
+        coilRead.funding_k()
+      ]);
+      document.getElementById('p-tax').textContent = (Number(tax) / 100).toFixed(2) + ' %';
+      document.getElementById('p-k').textContent = (Number(fk2) / 1e18).toFixed(3);
+    } catch {}
+
+    currentMarkTick = Number(markTick);
+    currentMarkPriceX18 = priceFromTick(currentMarkTick);
+
+    const markCoilPerEth = formatPriceFromTick(currentMarkTick);
+    document.getElementById('t-mark').textContent = markCoilPerEth;
+    document.getElementById('s-mark').innerHTML = markCoilPerEth + ' <small>PERPS/ETH</small>';
+    document.getElementById('s-tick').textContent = currentMarkTick;
+
+    // OI
+    const total = loi + soi;
+    const longPct = total > 0n ? Number(loi * 10000n / total) / 100 : 50;
+    const shortPct = 100 - longPct;
+    document.getElementById('oi-bar-long').style.width = longPct + '%';
+    document.getElementById('oi-bar-short').style.width = shortPct + '%';
+    document.getElementById('oi-l-pct').textContent = longPct.toFixed(1) + '% L';
+    document.getElementById('oi-s-pct').textContent = shortPct.toFixed(1) + '% S';
+    document.getElementById('oi-l-abs').textContent = formatPerps(loi);
+    document.getElementById('oi-s-abs').textContent = formatPerps(soi);
+    document.getElementById('t-loi').textContent = formatPerps(loi);
+    document.getElementById('t-soi').textContent = formatPerps(soi);
+
+    // Funding rate (1h estimate from OI imbalance)
+    const imb = loi - soi;
+    const denom = loi + soi + 1n;
+    const k = fk; // 1e18
+    // ratePerHour = k * imb / denom, clamped at ±0.001 (0.1%)
+    let rateNum = Number(imb) / Number(denom) * Number(k) / 1e18;
+    rateNum = Math.max(-0.001, Math.min(0.001, rateNum));
+    const ratePct = rateNum * 100;
+    const fundingEl = document.getElementById('s-funding');
+    const fundingDir = document.getElementById('s-funding-dir');
+    fundingEl.textContent = (ratePct >= 0 ? '+' : '') + ratePct.toFixed(4) + '%';
+    fundingEl.className = 'big-stat ' + (ratePct > 0 ? 'down' : ratePct < 0 ? 'up' : 'accent');
+    fundingDir.textContent = ratePct > 0 ? 'longs pay shorts · per hour'
+                         : ratePct < 0 ? 'shorts pay longs · per hour'
+                         : 'balanced';
+    document.getElementById('t-funding').innerHTML = '<span class="' + (ratePct > 0 ? 'down' : 'up') + '">' + (ratePct >= 0 ? '+' : '') + ratePct.toFixed(4) + '%</span>';
+
+    // Buckets
+    document.getElementById('b-treasury').textContent = formatEth(tEth);
+    document.getElementById('b-insurance').textContent = formatEth(iEth);
+    document.getElementById('b-pol').textContent = formatEth(pEth);
+    document.getElementById('b-polcoil').textContent = formatPerps(pCoil);
+    document.getElementById('t-treasury').textContent = formatEth(tEth);
+    document.getElementById('t-insurance').textContent = formatEth(iEth);
+
+    // Burn vault
+    const burnedNum = Number(ethers.formatUnits(burned, 18));
+    const supplyNum = Number(ethers.formatUnits(totalSupply, 18));
+    const initialSupply = supplyNum + burnedNum;  // pre-burn supply
+    const burnPct = initialSupply > 0 ? (burnedNum / initialSupply * 100) : 0;
+    document.getElementById('bv-total').innerHTML = formatPerpsNum(burnedNum) + ' <small>PERPS</small>';
+    document.getElementById('bv-pct').textContent = burnPct.toFixed(3) + ' % of supply';
+
+    const pendingEth = Number(ethers.formatEther(pending));
+    const minBuybackEth = Number(ethers.formatEther(minBuyback));
+    const pct = Math.min(100, (pendingEth / minBuybackEth) * 100);
+    document.getElementById('bv-fill').style.width = pct.toFixed(1) + '%';
+    document.getElementById('bv-pending-eth').textContent = pendingEth.toFixed(4) + ' ETH';
+    const ready = pending >= minBuyback;
+    const burnBtn = document.getElementById('burnBtn');
+    if (account && ready) {
+      burnBtn.disabled = false;
+      burnBtn.textContent = '🔥 BURN ' + pendingEth.toFixed(4) + ' ETH';
+    } else if (!account) {
+      burnBtn.disabled = true;
+      burnBtn.textContent = '🔥 BURN';
+    } else {
+      burnBtn.disabled = true;
+      burnBtn.textContent = '🔥 below threshold';
+    }
+
+    // User portfolio
+    if (account) {
+      const [ethBal, coilBal, userOi] = await Promise.all([
+        readOnly.getBalance(account).catch(() => 0n),
+        coilRead.balanceOf(account),
+        coilRead.userOpenOi(account),
+      ]);
+      document.getElementById('my-eth').textContent = formatEth(ethBal);
+      document.getElementById('my-coil').textContent = formatPerps(coilBal);
+      document.getElementById('my-oi').textContent = formatPerps(userOi);
+    }
+  } catch (e) {
+    console.error('stats err', e);
+  }
+}
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Real-time PnL helpers — read spot tick directly from V4 PoolManager
+// (bypasses TWAP staleness, always shows live numbers)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const POOL_MANAGER_ADDR = "0x000000000004444c5dc75cB358380D2e3dE08A90";
+const POOL_MGR_ABI = [
+  "function getSlot0(bytes32 id) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"
+];
+let _poolManager = null;
+let _cachedPoolId = null;
+let _lastSpotTick = null;
+let _lastSpotTime = 0;
+
+async function getCurrentSpotTick() {
+  if (!provider) return null;
+  try {
+    if (!_poolManager) _poolManager = new ethers.Contract(POOL_MANAGER_ADDR, POOL_MGR_ABI, provider);
+    if (!_cachedPoolId) _cachedPoolId = await coilRead.poolId();
+    // Cache 3s to avoid hammering RPC
+    const now = Date.now();
+    if (_lastSpotTick !== null && now - _lastSpotTime < 3000) return _lastSpotTick;
+    const slot0 = await _poolManager.getSlot0(_cachedPoolId);
+    _lastSpotTick = Number(slot0.tick);
+    _lastSpotTime = now;
+    return _lastSpotTick;
+  } catch (e) {
+    console.warn('spot tick err:', e?.shortMessage || e?.message);
+    return null;
+  }
+}
+
+// Compute PnL in wei (BigInt, signed) — mirrors PositionMath.computePnl
+function computePnlAt(entryTick, currentTick, sizeWei, isLong) {
+  const entryPx = priceFromTick(entryTick);
+  const exitPx  = priceFromTick(currentTick);
+  if (entryPx === 0n || exitPx === 0n) return 0n;
+  const sizeBI = BigInt(sizeWei);
+  const ONE = 10n ** 18n;
+  const entryValueEth = (sizeBI * ONE) / entryPx;
+  const exitValueEth  = (sizeBI * ONE) / exitPx;
+  return isLong ? (exitValueEth - entryValueEth) : (entryValueEth - exitValueEth);
+}
+
+// Health factor scaled by 1e18 = (collateral + pnl) ÷ maintReq
+function computeHealthAt(collateralWei, entryTick, currentTick, sizeWei, isLong) {
+  const pnl = computePnlAt(entryTick, currentTick, sizeWei, isLong);
+  const collateralAfter = BigInt(collateralWei) + pnl;
+  if (collateralAfter <= 0n) return 0n;
+  const exitPx = priceFromTick(currentTick);
+  if (exitPx === 0n) return 0n;
+  const ONE = 10n ** 18n;
+  const currentNotional = (BigInt(sizeWei) * ONE) / exitPx;
+  const maintReq = currentNotional / 15n;  // 1/15 maint margin
+  if (maintReq === 0n) return (10n ** 36n);
+  return (collateralAfter * ONE) / maintReq;
+}
+
+let _myIdsCache = null;
+let _myIdsCacheKey = null;
+
+async function _getMyPositionIds() {
+  // Cache key includes account; invalidate when user switches
+  const key = account ? account.toLowerCase() : '';
+  if (_myIdsCacheKey === key && _myIdsCache !== null) return _myIdsCache;
+
+  try {
+    const filter = coilRead.filters.PositionOpened(null, account);
+    const events = await coilRead.queryFilter(filter, 0, 'latest');
+    const ids = [...new Set(events.map(e => e.args.id))];
+    _myIdsCache = ids;
+    _myIdsCacheKey = key;
+    return ids;
+  } catch (e) {
+    // Fallback: scan all IDs (slower but reliable)
+    console.warn('event filter failed, falling back to scan:', e?.shortMessage || e?.message);
+    try {
+      const nextId = await coilRead.nextPositionId();
+      const ids = [];
+      for (let i = 1n; i < nextId; i++) ids.push(i);
+      return ids;
+    } catch (_) { return []; }
+  }
+}
+
+async function refreshMyPositions() {
+  if (!account || !coilRead) { myPositions = []; renderPositions(); return; }
+  try {
+    // ⚡ FAST PATH: event-filtered IDs (only positions opened by this user)
+    const myIds = await _getMyPositionIds();
+    if (myIds.length === 0) {
+      myPositions = [];
+      renderPositions();
+      return;
+    }
+
+    // 1) Cheap oracle freshness probe
+    let oracleFresh = false;
+    try { await coilRead.getMarkTick(); oracleFresh = true; } catch (_) {}
+
+    // 2) Pre-load current spot tick (always works, no staleness)
+    const spotTick = await getCurrentSpotTick();
+
+    // 3) For each position, prefer TWAP view (if oracle fresh), else compute locally
+    const results = await Promise.all(myIds.map(async id => {
+      if (oracleFresh) {
+        try {
+          const v = await coilRead.getPositionView(id);
+          return { id, ...v, hasLiveData: true, dataSource: 'twap' };
+        } catch (_) {}
+      }
+      try {
+        const p = await coilRead.getPosition(id);
+        const result = {
+          id,
+          owner: p.owner,
+          isLong: p.isLong,
+          collateral: p.collateral,
+          size: p.size,
+          entryTick: p.entryTick,
+          currentTick: spotTick ?? 0,
+          unrealizedPnl: 0n,
+          fundingPay: 0n,
+          collateralAfter: BigInt(p.collateral),
+          maintReq: 0n,
+          healthFactor: (10n ** 36n),
+          hasLiveData: false,
+          dataSource: 'raw'
+        };
+        if (spotTick !== null && p.size > 0n) {
+          const pnl = computePnlAt(Number(p.entryTick), spotTick, p.size, p.isLong);
+          const hf  = computeHealthAt(p.collateral, Number(p.entryTick), spotTick, p.size, p.isLong);
+          const exitPx = priceFromTick(spotTick);
+          const notional = exitPx === 0n ? 0n : (BigInt(p.size) * (10n ** 18n)) / exitPx;
+          result.unrealizedPnl = pnl;
+          result.collateralAfter = BigInt(p.collateral) + pnl;
+          result.maintReq = notional / 15n;
+          result.healthFactor = hf;
+          result.hasLiveData = true;
+          result.dataSource = 'spot';
+        }
+        return result;
+      } catch (_) { return null; }
+    }));
+
+    allPositions = results.filter(r => r && r.owner && r.size > 0n);
+    myPositions = allPositions.filter(r => r.owner.toLowerCase() === account.toLowerCase());
+    renderPositions();
+    renderAllPositions();
+  } catch (e) {
+    console.error('positions err', e);
+  }
+}
+
+function renderAllPositions() {
+  const list = document.getElementById('all-pos-list');
+  const cnt = document.getElementById('all-count');
+  if (!list) return;
+  cnt.textContent = allPositions.length + ' total';
+  if (!allPositions.length) {
+    list.innerHTML = '<div class="pos-empty">no positions yet<small>be the first</small></div>';
+    return;
+  }
+  // Sort by ID ascending
+  const sorted = [...allPositions].sort((a, b) => Number(a.id - b.id));
+  list.innerHTML = sorted.map(p => {
+    const isMine = account && p.owner.toLowerCase() === account.toLowerCase();
+    const live = p.hasLiveData;
+    const hf = live ? Number(p.healthFactor) / 1e18 : null;
+    const hfText = !live ? '—' : (hf >= 999 ? '∞' : hf.toFixed(2));
+    const hfClass = !live ? 'healthy' : hf > 1.5 ? 'healthy' : hf > 1.0 ? 'warning' : 'danger';
+    const pnl = p.unrealizedPnl;
+    const pnlEth = live ? Number(ethers.formatEther(pnl < 0n ? -pnl : pnl)) : 0;
+    const pnlSign = pnl >= 0n ? '+' : '−';
+    const pnlClass = !live ? '' : pnl > 0n ? 'pos' : pnl < 0n ? 'neg' : '';
+    const pnlText = live ? `${pnlSign}${pnlEth.toFixed(4)} ETH` : '—';
+    const cardStyle = isMine ? 'border-color:var(--accent); background:rgba(125,249,255,0.04);' : '';
+    return `
+      <div class="pos-card" style="${cardStyle}">
+        <div class="side ${p.isLong ? 'long' : 'short'}">
+          ${p.isLong ? 'Long' : 'Short'}
+          <small>#${p.id}${isMine ? ' · YOU' : ''}${p.dataSource === 'spot' ? ' · spot' : ''}</small>
+        </div>
+        <div class="stat">
+          <div class="l">Owner</div>
+          <div class="v" style="${isMine ? 'color:var(--accent)' : ''}">${p.owner.slice(0,6)}…${p.owner.slice(-4)}</div>
+        </div>
+        <div class="stat">
+          <div class="l">Size</div>
+          <div class="v">${formatPerps(p.size)}</div>
+        </div>
+        <div class="stat">
+          <div class="l">Collateral</div>
+          <div class="v">${formatEth(p.collateral)}</div>
+        </div>
+        <div class="stat">
+          <div class="l">uPnL</div>
+          <div class="v ${pnlClass}">${pnlText}</div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px">
+          <div class="hf ${hfClass}">${hfText}${live ? '<small style="font-family:var(--mono); font-size:11px; color:var(--paper-faint)">×</small>' : ''}</div>
+          ${isMine ? `<button class="cta ghost" style="font-size:11px; padding:6px 10px" onclick="closePos('${p.id}')">Close</button>` : (live && hf < 1.0 ? `<button class="cta short" style="font-size:11px; padding:6px 10px" onclick="liquidatePos('${p.id}')">Liquidate</button>` : '')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderPositions() {
+  const list = document.getElementById('pos-list');
+  document.getElementById('pos-count').textContent = myPositions.length + ' open';
+
+  // Toggle oracle-stale warning if any position lacks live data
+  const anyStale = myPositions.some(p => !p.hasLiveData);
+  const warnEl = document.getElementById('oracle-warn');
+  if (warnEl) warnEl.style.display = anyStale ? 'block' : 'none';
+
+  if (!myPositions.length) {
+    list.innerHTML = '<div class="pos-empty">no open positions<small>open one on the left</small></div>';
+    return;
+  }
+  list.innerHTML = myPositions.map(p => {
+    const live = p.hasLiveData;
+    const hfRaw = live ? Number(p.healthFactor) / 1e18 : 999;
+    const hfCapped = isFinite(hfRaw) ? Math.min(hfRaw, 999) : 999;
+    const hfClass = !live ? 'healthy' : hfCapped > 1.5 ? 'healthy' : hfCapped > 1.0 ? 'warning' : 'danger';
+    const cardClass = live && hfCapped < 1.0 ? 'pos-card danger' : 'pos-card';
+    const pnl = p.unrealizedPnl;
+    const pnlEth = live ? Number(ethers.formatEther(pnl < 0n ? -pnl : pnl)) : 0;
+    const pnlSign = pnl >= 0n ? '+' : '−';
+    const pnlClass = !live ? '' : pnl > 0n ? 'pos' : pnl < 0n ? 'neg' : '';
+    const pnlText = live ? `${pnlSign}${pnlEth.toFixed(4)} ETH` : '— (oracle stale)';
+    const hfText  = live ? (hfCapped >= 999 ? '∞' : hfCapped.toFixed(2)) : '—';
+    return `
+      <div class="${cardClass}">
+        <div class="pos-head-row">
+          <div class="side ${p.isLong ? 'long' : 'short'}">${p.isLong ? 'LONG' : 'SHORT'}</div>
+          <div class="pos-id-badge" title="Position ID — copy this to lookup later">#${p.id}</div>
+          <div class="pos-source ${p.dataSource}" title="Data source">${p.dataSource === 'spot' ? 'spot' : (live ? 'twap' : 'stale')}</div>
+        </div>
+        
+        <div class="stat">
+          <div class="l">Size</div>
+          <div class="v">${formatPerps(p.size)}</div>
+        </div>
+        <div class="stat">
+          <div class="l">Collateral</div>
+          <div class="v">${formatEth(p.collateral)}</div>
+        </div>
+        <div class="stat">
+          <div class="l">uPnL</div>
+          <div class="v ${pnlClass}">${pnlText}</div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px">
+          <div class="hf ${hfClass}">${hfText}${live ? '<small style="font-family:var(--mono); font-size:11px; color:var(--paper-faint)">×</small>' : ''}</div>
+          <button class="cta ghost" style="font-size:11px; padding:6px 10px" onclick="closePos('${p.id}')">Close</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Trade actions
+// ────────────────────────────────────────────────────────────────────
+function setDir(dir) {
+  currentDir = dir;
+  document.querySelectorAll('.dir-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.dir-btn[data-dir="${dir}"]`).classList.add('active');
+  const btn = document.getElementById('openBtn');
+  btn.classList.toggle('long', dir === 'long');
+  btn.classList.toggle('short', dir === 'short');
+  if (!btn.disabled) btn.textContent = 'Open ' + (dir === 'long' ? 'Long' : 'Short');
+  recalc();
+}
+
+function recalc() {
+  const collateralIn = parseFloat(document.getElementById('collateral-in').value);
+  const lev = parseFloat(document.getElementById('lev-slider').value);
+  document.getElementById('lev-num').textContent = lev.toFixed(1);
+  document.getElementById('lev-info').textContent = lev.toFixed(1) + '×';
+
+  // Show/hide mark-not-loaded warning
+  const markWarn = document.getElementById('mark-warn');
+  if (markWarn) {
+    const markLoaded = currentMarkPriceX18 && currentMarkPriceX18 !== 0n;
+    markWarn.style.display = markLoaded ? 'none' : 'block';
+    // Also disable open button when not loaded
+    const btn = document.getElementById('openBtn');
+    if (btn && account && !markLoaded) {
+      btn.disabled = true;
+      btn.textContent = 'Mark price not loaded — wait';
+    }
+  }
+
+  if (!collateralIn || !currentMarkPriceX18 || currentMarkPriceX18 === 0n) {
+    document.getElementById('pv-notional').textContent = '— ETH';
+    document.getElementById('pv-size').textContent = '— COIL';
+    document.getElementById('pv-entry').textContent = '— PERPS/ETH';
+    document.getElementById('pv-liq').textContent = '—';
+    return;
+  }
+  const notionalEth = collateralIn * lev;
+  // priceX18 is BigInt. Use ethers.formatUnits for safe float conversion (handles huge prices).
+  const priceFloat = Number(ethers.formatUnits(currentMarkPriceX18, 18));
+  const sizeCoil = notionalEth * priceFloat;
+
+  document.getElementById('pv-notional').textContent = notionalEth.toFixed(4) + ' ETH';
+  document.getElementById('pv-size').textContent = formatPerpsNum(sizeCoil);
+  document.getElementById('pv-entry').textContent = formatPerpsNum(priceFloat) + ' PERPS/ETH';
+
+  // Rough liq tick: ~ entry tick ± 95% of effective range; for display only
+  const liqDistPct = (1 / lev) * 0.93;
+  const liqPriceFactor = currentDir === 'long' ? (1 - liqDistPct) : (1 + liqDistPct);
+  // priceFromTick is monotonic in tick: tick down → price down (PERPS/ETH)
+  // For long, price needs to go down → liq when price drops by ~(1/lev)
+  document.getElementById('pv-liq').textContent = formatPerpsNum(priceFloat * liqPriceFactor) + ' PERPS/ETH';
+}
+
+async function openPosition() {
+  if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
+  const collateralIn = parseFloat(document.getElementById('collateral-in').value);
+  const lev = parseFloat(document.getElementById('lev-slider').value);
+  if (!collateralIn || collateralIn < 0.01) return toast('Collateral must be ≥ 0.01 ETH', 'error');
+  if (lev > 10) return toast('Max leverage is 10×', 'error');
+
+  // CRITICAL pre-flight: mark price must be live BEFORE submitting
+  // (Otherwise a stale/zero priceX18 → sizeWei=0 → STUCK POSITION on-chain!)
+  if (!currentMarkPriceX18 || currentMarkPriceX18 === 0n) {
+    return toast('⛔ Mark price not loaded — refresh page (Ctrl+Shift+R) and wait for stats to populate.', 'error');
+  }
+  if (!currentMarkTick) {
+    return toast('⛔ Mark tick = 0 — pool not ready or oracle stale. Sync TWAP first.', 'error');
+  }
+
+  // Compute size: size_coil = collateral × lev × price (PERPS/ETH × 1e18)
+  const collateralWei = ethers.parseEther(collateralIn.toString());
+  const levBigInt = BigInt(Math.floor(lev * 1000));
+  const sizeWei = (collateralWei * levBigInt * currentMarkPriceX18) / (1000n * (10n ** 18n));
+
+  // CRITICAL guard: never submit size=0 (contract creates an unrecoverable stuck position!)
+  if (sizeWei === 0n) {
+    return toast('⛔ Computed size = 0 — would create a stuck position. Refresh page.', 'error');
+  }
+  if (sizeWei > ((2n ** 128n) - 1n)) return toast('Size overflow — reduce collateral or leverage', 'error');
+
+  try {
+    document.getElementById('openBtn').disabled = true;
+    document.getElementById('openBtn').textContent = 'Confirming…';
+    const tx = await coilWrite.openPosition(
+      currentDir === 'long',
+      sizeWei,
+      { value: collateralWei }
+    );
+    toast('Tx sent: <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
+    document.getElementById('openBtn').textContent = 'Mining…';
+    const rc = await tx.wait();
+    toast('Position opened in block <b>' + rc.blockNumber + '</b>', 'success');
+    document.getElementById('collateral-in').value = '';
+    refreshAll();
+  } catch (e) {
+    toast('Open failed: ' + (e.shortMessage || e.message || e), 'error');
+  } finally {
+    document.getElementById('openBtn').disabled = false;
+    document.getElementById('openBtn').textContent = 'Open ' + (currentDir === 'long' ? 'Long' : 'Short');
+  }
+}
+
+async function closePos(id) {
+  if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
+  try {
+    // Pre-flight: try a static call to see if it would revert
+    try {
+      await coilWrite.closePosition.staticCall(id);
+    } catch (simErr) {
+      const msg = (simErr.shortMessage || simErr.message || '').toLowerCase();
+      // If revert is due to stale oracle, auto-sync first
+      if (msg.includes('stale') || msg.includes('insufficienthistory') || msg.includes('0x')) {
+        toast('Oracle stale — auto-syncing first...', 'info');
+        try {
+          const syncTx = await coilWrite.syncObservation();
+          await syncTx.wait();
+          toast('TWAP synced, now closing...', 'info');
+        } catch (syncErr) {
+          toast('Sync failed: ' + (syncErr.shortMessage || syncErr.message), 'error');
+          return;
+        }
+      } else {
+        throw simErr;  // re-throw if it's not staleness
+      }
+    }
+
+    const tx = await coilWrite.closePosition(id);
+    toast('Closing #' + id + ': <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
+    const rc = await tx.wait();
+    toast('Position #' + id + ' closed in block ' + rc.blockNumber, 'success');
+    refreshAll();
+  } catch (e) {
+    const msg = (e.shortMessage || e.message || '').toLowerCase();
+    if (msg.includes('positiontooyoung')) {
+      toast('Position too young — minimum hold is ~10 min (50 blocks). Wait a bit more.', 'error');
+    } else if (msg.includes('deathswitchactive')) {
+      toast('Death switch active — contract frozen, but close still works after min hold.', 'error');
+    } else {
+      toast('Close failed: ' + (e.shortMessage || e.message || String(e)).slice(0, 120), 'error');
+    }
+  }
+}
+
+async function triggerBurn() {
+  if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
+  const btn = document.getElementById('burnBtn');
+  const prevText = btn.textContent;
+  try {
+    btn.disabled = true;
+    btn.textContent = '🔥 BURNING…';
+    const tx = await coilWrite.buybackAndBurn();
+    toast('🔥 Buyback tx: <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
+    btn.textContent = '🔥 mining…';
+    const rc = await tx.wait();
+    // Try to parse the BuybackAndBurn event for burned amount
+    let burnedAmount = '';
+    try {
+      const evt = rc.logs.find(l => l.topics && l.topics[0] === ethers.id('BuybackAndBurn(uint256,uint256,uint256,address)'));
+      if (evt) {
+        const decoded = ethers.AbiCoder.defaultAbiCoder().decode(['uint256','uint256','uint256'], evt.data);
+        burnedAmount = ' · ' + formatPerpsNum(Number(ethers.formatUnits(decoded[1], 18))) + ' PERPS gone';
+      }
+    } catch {}
+    toast('🔥 Burn complete!' + burnedAmount, 'success');
+    refreshAll();
+  } catch (e) {
+    toast('Burn failed: ' + (e.shortMessage || e.message || e), 'error');
+    btn.disabled = false;
+    btn.textContent = prevText;
+  }
+}
+
+async function setMaxCollateral() {
+  if (!account) return;
+  try {
+    const bal = await readOnly.getBalance(account);
+    const reserved = ethers.parseEther('0.01');  // keep gas reserve
+    const usable = bal > reserved ? bal - reserved : 0n;
+    document.getElementById('collateral-in').value = Number(ethers.formatEther(usable)).toFixed(4);
+    recalc();
+  } catch {}
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Liquidator + Keeper actions
+// ────────────────────────────────────────────────────────────────────
+let liquidatable = [];
+
+async function refreshLiquidatable() {
+  // Now derived from allPositions (already loaded by refreshMyPositions)
+  // Only positions with live data and HF < 1.0 are liquidatable
+  liquidatable = allPositions
+    .filter(r => r.hasLiveData && r.healthFactor < (10n ** 18n))
+    .sort((a, b) => {
+      const diff = a.healthFactor - b.healthFactor;
+      return diff < 0n ? -1 : diff > 0n ? 1 : 0;
+    });
+  renderLiquidatable();
+}
+
+function renderLiquidatable() {
+  const list = document.getElementById('liq-list');
+  const cnt = document.getElementById('liq-count');
+  cnt.textContent = liquidatable.length + ' liquidatable';
+  if (!liquidatable.length) {
+    list.innerHTML = '<div class="pos-empty">no liquidatable positions<small>all positions healthy</small></div>';
+    return;
+  }
+  list.innerHTML = liquidatable.map(p => {
+    const hf = Number(p.healthFactor) / 1e18;
+    const collEth = Number(ethers.formatEther(p.collateralAfter < 0n ? 0n : p.collateralAfter));
+    const bounty = collEth * 0.05;
+    return `
+      <div class="pos-card danger">
+        <div class="side ${p.isLong ? 'long' : 'short'}">
+          ${p.isLong ? 'Long' : 'Short'}
+          <small>#${p.id}</small>
+        </div>
+        <div class="stat">
+          <div class="l">Owner</div>
+          <div class="v">${p.owner.slice(0,6)}…${p.owner.slice(-4)}</div>
+        </div>
+        <div class="stat">
+          <div class="l">Size</div>
+          <div class="v">${formatPerps(p.size)}</div>
+        </div>
+        <div class="stat">
+          <div class="l">Bounty ~</div>
+          <div class="v pos">${bounty.toFixed(5)} ETH</div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px">
+          <div class="hf danger">${hf.toFixed(3)}<small style="font-family:var(--mono); font-size:11px; color:var(--paper-faint)">×</small></div>
+          <button class="cta short" style="font-size:11px; padding:6px 12px" onclick="liquidatePos('${p.id}')">Liquidate</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function liquidatePos(id) {
+  if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
+  try {
+    try {
+      await coilWrite.liquidate.staticCall(id);
+    } catch (simErr) {
+      const msg = (simErr.shortMessage || simErr.message || '').toLowerCase();
+      if (msg.includes('stale') || msg.includes('insufficienthistory')) {
+        toast('Oracle stale — auto-syncing first...', 'info');
+        const syncTx = await coilWrite.syncObservation();
+        await syncTx.wait();
+      } else {
+        throw simErr;
+      }
+    }
+    const tx = await coilWrite.liquidate(id);
+    toast('Liquidating #' + id + ': <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
+    await tx.wait();
+    toast('🎯 Liquidated #' + id + ' — bounty earned', 'success');
+    refreshAll();
+  } catch (e) {
+    toast('Liquidate failed: ' + (e.shortMessage || e.message || String(e)).slice(0, 120), 'error');
+  }
+}
+
+async function keeperSyncFunding() {
+  if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
+  const btn = document.getElementById('syncFundingBtn');
+  const prev = btn.textContent;
+  try {
+    btn.disabled = true; btn.textContent = '↻ syncing…';
+    const tx = await coilWrite.syncFunding();
+    toast('Sync tx: <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
+    await tx.wait();
+    toast('Funding synced ✓', 'success');
+    refreshAll();
+  } catch (e) {
+    toast('Sync failed: ' + (e.shortMessage || e.message || String(e)), 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
+}
+
+async function keeperSyncObs() {
+  if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
+  const btn = document.getElementById('syncObsBtn');
+  const prev = btn.textContent;
+  try {
+    btn.disabled = true; btn.textContent = '↻ syncing…';
+    const tx = await coilWrite.syncObservation();
+    toast('TWAP sync tx: <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
+    await tx.wait();
+    toast('Observation synced ✓', 'success');
+    refreshAll();
+  } catch (e) {
+    toast('Sync failed: ' + (e.shortMessage || e.message || String(e)), 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Emergency lookup
+// ────────────────────────────────────────────────────────────────────
+async function lookupPosition() {
+  const id = document.getElementById('lookup-id').value;
+  if (!id || !coilRead) return;
+  const result = document.getElementById('lookup-result');
+  result.innerHTML = 'Looking up #' + id + '...';
+  try {
+    // Try raw struct first (no oracle)
+    const p = await coilRead.getPosition(id);
+    if (!p.owner || p.owner === '0x0000000000000000000000000000000000000000') {
+      result.innerHTML = '<span style="color:var(--short)">#' + id + ' does not exist or was closed</span>';
+      return;
+    }
+    let html = '<div style="line-height:1.7;">';
+    html += '<b style="color:var(--paper)">Position #' + id + '</b><br>';
+    html += '<span style="color:var(--paper-faint)">owner:</span> ' + p.owner;
+    if (account && p.owner.toLowerCase() === account.toLowerCase()) html += ' <span style="color:var(--long)">(YOU)</span>';
+    html += '<br>';
+    html += '<span style="color:var(--paper-faint)">side:</span> ' + (p.isLong ? '<span style="color:var(--long)">Long</span>' : '<span style="color:var(--short)">Short</span>') + '<br>';
+    html += '<span style="color:var(--paper-faint)">size:</span> ' + formatPerps(p.size) + '<br>';
+    html += '<span style="color:var(--paper-faint)">collateral:</span> ' + formatEth(p.collateral) + '<br>';
+    html += '<span style="color:var(--paper-faint)">entry tick:</span> ' + p.entryTick + '<br>';
+    html += '<span style="color:var(--paper-faint)">open block:</span> ' + p.openBlock + '<br>';
+
+    // Try rich view
+    try {
+      const v = await coilRead.getPositionView(id);
+      const hf = Number(v.healthFactor) / 1e18;
+      const pnl = Number(ethers.formatEther(v.unrealizedPnl < 0n ? -v.unrealizedPnl : v.unrealizedPnl));
+      html += '<span style="color:var(--paper-faint)">unrealized PnL:</span> ' + (v.unrealizedPnl >= 0n ? '+' : '−') + pnl.toFixed(4) + ' ETH<br>';
+      html += '<span style="color:var(--paper-faint)">health factor:</span> ' + (hf >= 999 ? '∞' : hf.toFixed(3)) + '<br>';
+    } catch (e) {
+      html += '<span style="color:var(--warn)">oracle stale — PnL/health unavailable. Click "↻ Sync TWAP" first.</span><br>';
+    }
+    html += '</div>';
+    result.innerHTML = html;
+  } catch (e) {
+    result.innerHTML = '<span style="color:var(--short)">Error: ' + (e.shortMessage || e.message || e) + '</span>';
+  }
+}
+
+async function lookupClose() {
+  const id = document.getElementById('lookup-id').value;
+  if (!id) return toast('Enter a position ID first', 'error');
+  if (!confirm('Force close position #' + id + '? (will auto-sync oracle if needed)')) return;
+  await closePos(id);
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Math / formatters
+// ────────────────────────────────────────────────────────────────────
+// ━━━ Uniswap TickMath ported to BigInt (full precision, no Number overflow) ━━━
+const MAX_TICK_ = 887272n;
+const Q96_BI    = 1n << 96n;
+const Q32_BI    = 1n << 32n;
+
+function getSqrtPriceAtTickBigInt(tick) {
+  const tickBI = BigInt(tick);
+  const absTick = tickBI < 0n ? -tickBI : tickBI;
+  if (absTick > MAX_TICK_) throw new Error('Tick out of range: ' + tick);
+
+  let r = (absTick & 0x1n) !== 0n
+    ? 0xfffcb933bd6fad37aa2d162d1a594001n
+    : 0x100000000000000000000000000000000n;
+
+  if ((absTick & 0x2n)     !== 0n) r = (r * 0xfff97272373d413259a46990580e213an) >> 128n;
+  if ((absTick & 0x4n)     !== 0n) r = (r * 0xfff2e50f5f656932ef12357cf3c7fdccn) >> 128n;
+  if ((absTick & 0x8n)     !== 0n) r = (r * 0xffe5caca7e10e4e61c3624eaa0941cd0n) >> 128n;
+  if ((absTick & 0x10n)    !== 0n) r = (r * 0xffcb9843d60f6159c9db58835c926644n) >> 128n;
+  if ((absTick & 0x20n)    !== 0n) r = (r * 0xff973b41fa98c081472e6896dfb254c0n) >> 128n;
+  if ((absTick & 0x40n)    !== 0n) r = (r * 0xff2ea16466c96a3843ec78b326b52861n) >> 128n;
+  if ((absTick & 0x80n)    !== 0n) r = (r * 0xfe5dee046a99a2a811c461f1969c3053n) >> 128n;
+  if ((absTick & 0x100n)   !== 0n) r = (r * 0xfcbe86c7900a88aedcffc83b479aa3a4n) >> 128n;
+  if ((absTick & 0x200n)   !== 0n) r = (r * 0xf987a7253ac413176f2b074cf7815e54n) >> 128n;
+  if ((absTick & 0x400n)   !== 0n) r = (r * 0xf3392b0822b70005940c7a398e4b70f3n) >> 128n;
+  if ((absTick & 0x800n)   !== 0n) r = (r * 0xe7159475a2c29b7443b29c7fa6e889d9n) >> 128n;
+  if ((absTick & 0x1000n)  !== 0n) r = (r * 0xd097f3bdfd2022b8845ad8f792aa5825n) >> 128n;
+  if ((absTick & 0x2000n)  !== 0n) r = (r * 0xa9f746462d870fdf8a65dc1f90e061e5n) >> 128n;
+  if ((absTick & 0x4000n)  !== 0n) r = (r * 0x70d869a156d2a1b890bb3df62baf32f7n) >> 128n;
+  if ((absTick & 0x8000n)  !== 0n) r = (r * 0x31be135f97d08fd981231505542fcfa6n) >> 128n;
+  if ((absTick & 0x10000n) !== 0n) r = (r * 0x9aa508b5b7a84e1c677de54f3e99bc9n)  >> 128n;
+  if ((absTick & 0x20000n) !== 0n) r = (r * 0x5d6af8dedb81196699c329225ee604n)   >> 128n;
+  if ((absTick & 0x40000n) !== 0n) r = (r * 0x2216e584f5fa1ea926041bedfe98n)     >> 128n;
+  if ((absTick & 0x80000n) !== 0n) r = (r * 0x48a170391f7dc42444e8fa2n)          >> 128n;
+
+  if (tickBI > 0n) {
+    const MAX_UINT256 = (1n << 256n) - 1n;
+    r = MAX_UINT256 / r;
+  }
+
+  // Convert Q128.128 → Q96 (sqrtPriceX96)
+  return (r >> 32n) + (r % Q32_BI === 0n ? 0n : 1n);
+}
+
+// Mirror of contract's PositionMath.priceFromTick — returns priceX18 (COIL per ETH × 1e18)
+function priceFromTick(tick) {
+  try {
+    const sqrtP = getSqrtPriceAtTickBigInt(tick);
+    // priceX96 = sqrtP^2 / Q96
+    const priceX96 = (sqrtP * sqrtP) / Q96_BI;
+    // priceX18 = priceX96 * 1e18 / Q96
+    const priceX18 = (priceX96 * (10n ** 18n)) / Q96_BI;
+    return priceX18;
+  } catch (e) {
+    console.warn('priceFromTick err:', e);
+    return 0n;
+  }
+}
+
+// Display helper — uses BigInt internally, converts safely for display
+function formatPriceFromTick(tick) {
+  const priceX18 = priceFromTick(tick);
+  if (priceX18 === 0n) return '—';
+  // Use ethers.formatUnits to get full-precision decimal string
+  const priceFloat = Number(ethers.formatUnits(priceX18, 18));
+  return formatPerpsNum(priceFloat);
+}
+
+function formatEth(weiBigInt) {
+  if (!weiBigInt) return '0 ETH';
+  const eth = Number(ethers.formatEther(weiBigInt));
+  if (eth === 0) return '0 ETH';
+  if (eth < 0.0001) return eth.toExponential(2) + ' ETH';
+  if (eth < 1) return eth.toFixed(4) + ' ETH';
+  if (eth < 1000) return eth.toFixed(3) + ' ETH';
+  return (eth / 1000).toFixed(2) + 'k ETH';
+}
+
+function formatPerps(weiBigInt) {
+  if (!weiBigInt) return '0';
+  const coil = Number(ethers.formatUnits(weiBigInt, 18));
+  return formatPerpsNum(coil) + ' COIL';
+}
+
+function formatPerpsNum(n) {
+  if (!isFinite(n) || n === 0) return '0';
+  if (n < 0.01) return n.toExponential(2);
+  if (n < 1000) return n.toFixed(2);
+  if (n < 1_000_000) return (n / 1000).toFixed(1) + 'k';
+  if (n < 1_000_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+  if (n < 1_000_000_000_000) return (n / 1_000_000_000).toFixed(2) + 'B';
+  return (n / 1_000_000_000_000).toFixed(2) + 'T';
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Toasts
+// ────────────────────────────────────────────────────────────────────
+function toast(msg, kind = 'info') {
+  const div = document.createElement('div');
+  div.className = 'toast ' + kind;
+  div.innerHTML = msg;
+  document.getElementById('toast-wrap').appendChild(div);
+  setTimeout(() => {
+    div.style.transition = 'opacity .4s';
+    div.style.opacity = '0';
+    setTimeout(() => div.remove(), 400);
+  }, 6000);
+}
+
+// recalc on load defaults
+document.getElementById('collateral-in').value = '0.1';
+recalc();
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// v0.2 Death Switch logic
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function refreshDeathSwitch() {
+  const panel = document.getElementById('death-switch-panel');
+  const countdown = document.getElementById('ds-countdown');
+  const btn = document.getElementById('ds-trigger-btn');
+  const detail = document.getElementById('ds-detail');
+  if (!panel || !coilRead) return;
+
+  try {
+    const [activated, lastTs, threshold] = await Promise.all([
+      coilRead.deathSwitchActivated(),
+      coilRead.lastSwapTimestamp(),
+      coilRead.DEATH_INACTIVITY()
+    ]);
+
+    panel.style.display = 'block';
+
+    if (activated) {
+      countdown.innerHTML = '<span style="color:var(--short)">already activated · contract frozen</span>';
+      btn.style.display = 'none';
+      detail.textContent = 'All bucket ETH has been swapped for PERPS and burned. Existing positions can still close.';
+      return;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const elapsed = now - Number(lastTs);
+    const remaining = Number(threshold) - elapsed;
+
+    if (remaining <= 0) {
+      countdown.innerHTML = '<span style="color:var(--short)">UNLOCKED · 24h+ inactivity</span>';
+      btn.style.display = 'inline-block';
+      detail.textContent = `Last swap was ${formatDuration(elapsed)} ago. Trigger to burn all ETH (caller gets 0.1% reward).`;
+    } else {
+      const hrs = Math.floor(remaining / 3600);
+      const mins = Math.floor((remaining % 3600) / 60);
+      countdown.innerHTML = `<span style="color:var(--paper-dim)">activates in <b>${hrs}h ${mins}m</b></span>`;
+      btn.style.display = 'none';
+      detail.textContent = `Last swap ${formatDuration(elapsed)} ago. Death switch unlocks when 24h passes without a single swap.`;
+    }
+  } catch (e) {
+    panel.style.display = 'none';
+    console.warn('death switch refresh err:', e?.shortMessage || e?.message);
+  }
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return seconds + 's';
+  if (seconds < 3600) return Math.floor(seconds/60) + 'm';
+  if (seconds < 86400) return Math.floor(seconds/3600) + 'h ' + Math.floor((seconds%3600)/60) + 'm';
+  return Math.floor(seconds/86400) + 'd ' + Math.floor((seconds%86400)/3600) + 'h';
+}
+
+async function triggerDeathSwitch() {
+  if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
+  if (!confirm('⚠ This burns ALL contract ETH (POL + Treasury + Insurance + Buyback) and frozen contract permanently. Continue?')) return;
+  try {
+    await coilWrite.activateDeathSwitch.staticCall();
+  } catch (e) {
+    const msg = (e.shortMessage || e.message || '').toLowerCase();
+    if (msg.includes('stillalive')) return toast('Not enough inactivity (need 24h since last swap)', 'error');
+    return toast('Pre-check failed: ' + (e.shortMessage || e.message).slice(0, 120), 'error');
+  }
+  try {
+    const tx = await coilWrite.activateDeathSwitch();
+    toast('Death switch triggered: ' + tx.hash.slice(0,10) + '…', 'info');
+    await tx.wait();
+    toast('💀 Contract frozen, ETH burned into COIL', 'success');
+    refreshDeathSwitch();
+    refreshAll();
+  } catch (e) {
+    toast('Trigger failed: ' + (e.shortMessage || e.message || String(e)).slice(0, 120), 'error');
+  }
+}
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// v2 Exchange market header live update
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function refreshMarketStrip() {
+  if (!provider) return;
+  const $ = (id) => document.getElementById(id);
+  try {
+    // Block number + status dot
+    const blk = await provider.getBlockNumber().catch(() => null);
+    if (blk !== null) {
+      $('mkt-block')?.replaceChildren(document.createTextNode(blk.toString()));
+      $('status-dot')?.classList.add('active');
+    }
+
+    if (!coilRead) return;
+
+    // Mark price + tick (use spot tick fallback, never blocks)
+    const spotTick = await getCurrentSpotTick();
+    if (spotTick !== null) {
+      $('mkt-mark-tick')?.replaceChildren(document.createTextNode(spotTick.toString()));
+      const priceX18 = priceFromTick(spotTick);
+      if (priceX18 > 0n) {
+        const priceFloat = Number(ethers.formatUnits(priceX18, 18));
+        $('mkt-mark-price')?.replaceChildren(document.createTextNode(formatCoilNum(priceFloat) + ' /ETH'));
+      }
+    }
+
+    // OI bars
+    try {
+      const [longOi, shortOi] = await Promise.all([
+        coilRead.totalLongOi(),
+        coilRead.totalShortOi()
+      ]);
+      const lN = Number(ethers.formatUnits(longOi, 18));
+      const sN = Number(ethers.formatUnits(shortOi, 18));
+      const total = lN + sN;
+      if (total > 0) {
+        const lPct = (lN / total) * 100;
+        const sPct = (sN / total) * 100;
+        $('oi-long-bar') && ($('oi-long-bar').style.width = lPct + '%');
+        $('oi-short-bar') && ($('oi-short-bar').style.width = sPct + '%');
+        $('oi-long-text')?.replaceChildren(document.createTextNode(formatCoilNum(lN) + ' L'));
+        $('oi-short-text')?.replaceChildren(document.createTextNode(formatCoilNum(sN) + ' S'));
+      } else {
+        $('oi-long-text')?.replaceChildren(document.createTextNode('0 L'));
+        $('oi-short-text')?.replaceChildren(document.createTextNode('0 S'));
+      }
+    } catch (_) {}
+
+    // Total burned
+    try {
+      const burned = await coilRead.totalBurned();
+      const burnedN = Number(ethers.formatUnits(burned, 18));
+      $('mkt-burned')?.replaceChildren(document.createTextNode(formatPerpsNum ? formatPerpsNum(burnedN) + ' PERPS' : formatCoilNum(burnedN) + ' PERPS'));
+    } catch (_) {}
+
+    // Funding rate (approx per hour)
+    try {
+      const k = await coilRead.funding_k();
+      const lOi = await coilRead.totalLongOi();
+      const sOi = await coilRead.totalShortOi();
+      const denom = lOi + sOi + 1n;
+      const imb = lOi > sOi ? (lOi - sOi) : -(sOi - lOi);
+      const ratePerHour = Number(imb) * Number(k) / (Number(denom) * 1e18);
+      // Clamp ±0.1%
+      const clamped = Math.max(-0.001, Math.min(0.001, ratePerHour));
+      $('mkt-funding')?.replaceChildren(document.createTextNode((clamped * 100).toFixed(4) + '%'));
+    } catch (_) {}
+  } catch (e) {
+    console.warn('market strip err:', e?.shortMessage || e?.message);
+  }
+}
+
+// formatPerpsNum alias
+if (typeof window !== 'undefined' && typeof window.formatPerpsNum === 'undefined' && typeof formatCoilNum === 'function') {
+  window.formatPerpsNum = formatCoilNum;
+}
+
+
+// Wire contract link in nav to the configured address
+document.addEventListener('DOMContentLoaded', () => {
+  const cAddr = CONFIG.COIL_ADDRESS;
+  const link = document.getElementById('contractLink');
+  const short = document.getElementById('contractAddrShort');
+  if (link && cAddr && cAddr !== '0x0000000000000000000000000000000000000000') {
+    link.href = CONFIG.EXPLORER + '/address/' + cAddr;
+    if (short) short.textContent = cAddr.slice(0, 6) + '…' + cAddr.slice(-4);
+  } else {
+    if (short) short.textContent = 'not deployed';
+  }
+});
+
+</script>
+</body>
+</html>
