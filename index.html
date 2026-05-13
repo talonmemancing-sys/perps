@@ -2636,7 +2636,7 @@ input { border-radius: 12px !important; }
         <span class="max" onclick="setMaxCollateral()">max</span>
       </label>
       <div class="input-wrap">
-        <input id="collateral-in" type="number" min="0.012" step="0.01" placeholder="0.10" oninput="recalc()">
+        <input id="collateral-in" type="number" min="0.005" step="0.01" placeholder="0.10" oninput="recalc()">
         <span class="denom">ETH</span>
       </div>
     </div>
@@ -2659,6 +2659,12 @@ input { border-radius: 12px !important; }
       <div class="preview-row"><span>Entry (mark)</span><b id="pv-entry">— PERPS/ETH</b></div>
       <div class="preview-row"><span>Liq. price approx.</span><b id="pv-liq">—</b></div>
       <div class="preview-row"><span>Max leverage</span><b>10×</b></div>
+    </div>
+
+    <!-- ━━ Min-collateral warning (shown when input < required) ━━ -->
+    <div id="minWarn" style="display:none; margin-top:10px; padding:10px 12px; border:1px solid var(--short); background:rgba(255,107,107,0.06); font-family:var(--mono); font-size:11.5px; line-height:1.6; color:var(--short)">
+      <b>⚠ Collateral too low</b><br>
+      <span id="minWarnDetail" style="color:var(--paper-dim); font-weight:400">—</span>
     </div>
 
     <button class="open-btn cta long" id="openBtn" onclick="openPosition()" disabled>
@@ -2913,7 +2919,7 @@ const CONFIG = {
   LP_LOCKER:      "uncx",  // deployed PERPS v0.2.2  (hook bits = 0x6EC4)
   CHAIN_ID:       1,
   CHAIN_NAME:     "ethereum",
-  RPC_FALLBACK:   "https://eth.llamarpc.com",
+  RPC_FALLBACK:   "https://lb.drpc.live/ethereum/AhFFc_foCERVuckrokH_kjnE_CUEQVAR8ZuYtiKh6MJI",
   EXPLORER:       "https://etherscan.io",
 };
 
@@ -2965,21 +2971,28 @@ const COIL_ABI = [
   "function deathSwitchActivated() view returns (bool)",
   "function DEATH_INACTIVITY() view returns (uint256)",
   "function MIN_HOLD_BLOCKS() view returns (uint32)",
-  // ━━ Perps errors (renamed from Coil_*) ━━
+  // ━━ Perps errors (complete list from Perps3-remix.sol) ━━
   "error Perps_Paused()",
-  "error Perps_NotGovernance()",
-  "error Perps_BadInput()",
+  "error Perps_PoolBoundAlready()",
+  "error Perps_WrongPool()",
+  "error Perps_BadLeverage()",
+  "error Perps_OICap()",
+  "error Perps_UserOICap()",
+  "error Perps_PositionCap()",
   "error Perps_DustPosition()",
-  "error Perps_PositionTooYoung()",
-  "error Perps_OverLimit()",
-  "error Perps_Empty()",
   "error Perps_Healthy()",
+  "error Perps_SameBlock()",
+  "error Perps_NotOwner()",
+  "error Perps_Empty()",
+  "error Perps_NotGovernance()",
+  "error Perps_PositionTooYoung()",
   "error Perps_StillAlive()",
   "error Perps_DeathSwitchActive()",
   "error Perps_NoFunds()",
   "error Perps_Insolvent()",
   "error Perps_LiqCapPerBlock()",
-  "error Perps_WrongPool()",
+  "error Perps_BadInput()",
+  "error Perps_OverLimit()",
   // ━━ Observations / Oracle library errors ━━
   "error Stale()",
   "error InsufficientHistory()",
@@ -3654,6 +3667,38 @@ function recalc() {
     markWarn.style.display = markLoaded ? 'none' : 'block';
   }
 
+  // ━━ Min collateral live warning (covers 0.5% open fee + 0.01 hard min) ━━
+  const minWarn = document.getElementById('minWarn');
+  const minWarnDetail = document.getElementById('minWarnDetail');
+  const ob = document.getElementById('openBtn');
+  if (minWarn && minWarnDetail && collateralIn) {
+    if (collateralIn < _minCol) {
+      const fee = collateralIn * lev * 0.005;
+      const afterFee = collateralIn - fee;
+      const need = _minCol;
+      minWarn.style.display = 'block';
+      minWarnDetail.innerHTML = `
+        You sent <b style="color:var(--paper)">${collateralIn.toFixed(5)} ETH</b><br>
+        Open fee (0.5% × ${lev}× notional) = <b>${fee.toFixed(6)} ETH</b><br>
+        After fee: <b>${afterFee.toFixed(5)} ETH</b> — but contract requires ≥ <b>0.01 ETH</b> remaining<br>
+        <span style="color:var(--paper)">→ Send <b>≥ ${need.toFixed(4)} ETH</b> for ${lev}× leverage</span>
+      `;
+      // Visually disable open btn when below min (still connect-wallet aware)
+      if (ob && account) {
+        ob.disabled = true;
+        ob.textContent = `Min ${need.toFixed(4)} ETH for ${lev}× lev`;
+      }
+    } else {
+      minWarn.style.display = 'none';
+      if (ob && account) {
+        ob.disabled = false;
+        ob.textContent = 'Open ' + (currentDir === 'long' ? 'Long' : 'Short');
+      }
+    }
+  } else if (minWarn) {
+    minWarn.style.display = 'none';
+  }
+
   if (!collateralIn || !currentMarkPriceX18 || currentMarkPriceX18 === 0n) {
     document.getElementById('pv-notional').textContent = '— ETH';
     document.getElementById('pv-size').textContent = '— COIL';
@@ -3669,6 +3714,10 @@ function recalc() {
   document.getElementById('pv-notional').textContent = notionalEth.toFixed(4) + ' ETH';
   document.getElementById('pv-size').textContent = formatPerpsNum(sizeCoil);
   document.getElementById('pv-entry').textContent = formatPerpsNum(priceFloat) + ' PERPS/ETH';
+  // Update open fee preview
+  const openFee = notionalEth * 0.005;
+  const _pvFee = document.getElementById('pv-fee');
+  if (_pvFee) _pvFee.textContent = openFee.toFixed(6) + ' ETH';
 
   // Rough liq tick: ~ entry tick ± 95% of effective range; for display only
   const liqDistPct = (1 / lev) * 0.93;
@@ -3682,11 +3731,19 @@ async function openPosition() {
   if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
   const collateralIn = parseFloat(document.getElementById('collateral-in').value);
   const lev = parseFloat(document.getElementById('lev-slider').value);
-  // Dynamic min: collateral × (1 + 0.005×lev) must exceed 0.01 ETH
-  // So minimum collateral = 0.01 / (1 - 0.005×lev) + tiny buffer
+  // Hard floor: contract requires (msg.value - openFee) >= 0.01 ETH
+  // → msg.value >= 0.01 / (1 - 0.005 × lev)
   const minCollat = 0.01 / (1 - 0.005 * lev) + 0.0001;
-  if (!collateralIn || collateralIn < minCollat) {
-    return toast(`Collateral must be ≥ ${minCollat.toFixed(5)} ETH for ${lev}× lev (covers 0.5% open fee + 0.01 min)`, 'error');
+  if (!collateralIn) return toast('Enter collateral amount', 'error');
+  if (collateralIn < minCollat) {
+    const fee = collateralIn * lev * 0.005;
+    const afterFee = collateralIn - fee;
+    return toast(
+      `0.01 ETH 不够开仓。<br>` +
+      `Open fee (0.5%×${lev}× = ${fee.toFixed(6)} ETH) 扣完只剩 ${afterFee.toFixed(5)} ETH < 合约要求的 0.01 ETH。<br>` +
+      `请输入 ≥ <b>${minCollat.toFixed(4)} ETH</b>`,
+      'error'
+    );
   }
   if (lev > 10) return toast('Max leverage is 10×', 'error');
 
@@ -3728,39 +3785,48 @@ async function openPosition() {
       // Detailed diagnostics
       console.error('[perps] open static err:', simErr);
       console.error('  data:', simErr.data || simErr?.info?.error?.data);
-      console.error('  code:', simErr.code);
+      console.error('  revert:', simErr.revert);
 
-      const msg = (simErr.shortMessage || simErr.message || '').toLowerCase();
+      // PRIMARY: ethers v6 e.revert.name (reliable error name)
+      const errName = (simErr.revert?.name || '').toLowerCase();
+      // FALLBACK: check shortMessage + full message + decoded name
+      const msg = (
+        (simErr.shortMessage || '') + ' ' + (simErr.message || '') + ' ' + errName
+      ).toLowerCase();
       const rawData = (simErr.data || simErr?.info?.error?.data || '').toLowerCase();
       const errSelector = rawData.length >= 10 ? rawData.slice(0, 10) : '';
 
-      // Known error selectors (4-byte function selectors of custom errors)
-      // Computed: keccak256("InsufficientHistory()") = 0x4cc7e0a4...
-      //           keccak256("Stale()")               = 0x88f1c510...
-      //           keccak256("Perps_Paused()")        = (depends, but msg.includes works)
-      const STALE_SELECTORS = ['0x88f1c510', '0xc6dde2a8'];
-      const INSUFFHIST_SELECTORS = ['0x4cc7e0a4', '0xc8acbe62'];
+      const SELECTOR_MAP = {
+        '0x747e4fc0': 'positiontooyoung',
+        '0x4cc7e0a4': 'insufficienthistory',
+        '0x88f1c510': 'stale',
+      };
+      const selectorErr = SELECTOR_MAP[errSelector] || '';
+      const has = (s) => msg.includes(s) || selectorErr.includes(s);
 
-      if (msg.includes('insufficienthistory') || INSUFFHIST_SELECTORS.includes(errSelector)) {
+      if (has('insufficienthistory') || has('stale')) {
         needsSync = true;
-      } else if (msg.includes('stale') || STALE_SELECTORS.includes(errSelector)) {
-        needsSync = true;
-      } else if (msg.includes('paused')) {
+      } else if (has('paused')) {
         return toast('Trading paused by governance', 'error');
-      } else if (msg.includes('overlimit') || msg.includes('oicap')) {
-        return toast('Position exceeds OI cap — reduce size', 'error');
-      } else if (msg.includes('dustposition') || msg.includes('dust')) {
+      } else if (has('overlimit') || has('oicap') || has('useroicap') || has('positioncap')) {
+        return toast('Position exceeds OI/position cap — reduce size', 'error');
+      } else if (has('dustposition')) {
         const minBuf = (0.01 / (1 - 0.005 * lev) + 0.0001).toFixed(5);
         return toast(`Collateral after open fee < 0.01 ETH minimum. Send ≥ ${minBuf} ETH for ${lev}× lev.`, 'error');
-      } else if (msg.includes('badinput') || msg.includes('badleverage')) {
+      } else if (has('badinput') || has('badleverage')) {
         return toast('Invalid leverage or collateral — check inputs', 'error');
-      } else if (msg.includes('missing revert data')) {
-        // Unknown revert — likely TWAP not enough history (no error data when oracle reverts)
-        // Auto-attempt sync as best guess
-        console.warn('[perps] missing revert data — assuming oracle issue, will try sync');
+      } else if (has('wrongpool')) {
+        return toast('Pool not initialized or wrong pool config', 'error');
+      } else if (has('deathswitch')) {
+        return toast('Death switch active — cannot open new positions', 'error');
+      } else if (has('missing revert data')) {
+        console.warn('[perps] missing revert data — assuming oracle issue');
         needsSync = true;
       } else {
-        return toast('Would revert: ' + (simErr.shortMessage || simErr.message || rawData || '').slice(0, 140), 'error');
+        return toast(
+          `Open revert: <code>${errSelector || '???'}</code> · ${(simErr.shortMessage||simErr.message||'').slice(0,100)}`,
+          'error'
+        );
       }
     }
 
@@ -3816,39 +3882,113 @@ async function closePos(id) {
   if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
   try {
     // Pre-flight: try a static call to see if it would revert
+    let needsSync = false;
     try {
       await coilWrite.closePosition.staticCall(id);
     } catch (simErr) {
-      const msg = (simErr.shortMessage || simErr.message || '').toLowerCase();
-      // If revert is due to stale oracle, auto-sync first
-      if (msg.includes('stale') || msg.includes('insufficienthistory') || msg.includes('0x')) {
-        toast('Oracle stale — auto-syncing first...', 'info');
-        try {
-          const syncTx = await coilWrite.syncObservation();
-          await syncTx.wait();
-          toast('TWAP synced, now closing...', 'info');
-        } catch (syncErr) {
-          toast('Sync failed: ' + (syncErr.shortMessage || syncErr.message), 'error');
-          return;
-        }
+      console.error('[perps] close static err:', simErr);
+      console.error('  data:', simErr.data || simErr?.info?.error?.data);
+      console.error('  revert:', simErr.revert);
+
+      // PRIMARY: ethers v6 decodes custom errors into e.revert.name
+      const errName = (simErr.revert?.name || '').toLowerCase();
+      // FALLBACK: check both shortMessage AND full message (different ethers versions)
+      const msg = (
+        (simErr.shortMessage || '') + ' ' + (simErr.message || '') + ' ' + errName
+      ).toLowerCase();
+      const rawData = (simErr.data || simErr?.info?.error?.data || '').toLowerCase();
+      const errSelector = rawData.length >= 10 ? rawData.slice(0, 10) : '';
+
+      // Known selectors (computed: keccak256("ErrorName()") first 4 bytes)
+      const SELECTOR_MAP = {
+        '0x747e4fc0': 'positiontooyoung',
+        '0x4cc7e0a4': 'insufficienthistory',
+        '0x88f1c510': 'stale',
+        // Add as discovered from raw data
+      };
+      const selectorErr = SELECTOR_MAP[errSelector] || '';
+
+      const has = (s) => msg.includes(s) || selectorErr.includes(s);
+
+      if (has('insufficienthistory')) {
+        needsSync = true;
+      } else if (has('stale')) {
+        needsSync = true;
+      } else if (has('positiontooyoung')) {
+        return toast(`⏳ Position #${id} 还太年轻 — 最低持仓 50 个区块 (~10 min). 等等再平.`, 'error');
+      } else if (has('sameblock')) {
+        return toast(`不能在同一区块开+平 (Perps_SameBlock). 等下一个区块`, 'error');
+      } else if (has('notowner')) {
+        return toast(`Position #${id} 不是你的仓位`, 'error');
+      } else if (has('empty')) {
+        return toast(`Position #${id} 已经平仓`, 'error');
+      } else if (has('insolvent')) {
+        return toast(`协议无足够 ETH 支付盈利 (Perps_Insolvent)`, 'error');
+      } else if (has('deathswitch')) {
+        return toast(`Death switch 已激活`, 'error');
+      } else if (has('missing revert data')) {
+        console.warn('[perps] missing revert data on close — assuming oracle');
+        needsSync = true;
       } else {
-        throw simErr;  // re-throw if it's not staleness
+        // Truly unknown — surface raw selector for me to add
+        return toast(
+          `Close revert: <code>${errSelector || '???'}</code> · ${(simErr.shortMessage||simErr.message||'').slice(0,100)}`,
+          'error'
+        );
       }
     }
 
+    // Auto-sync if needed
+    if (needsSync) {
+      toast('Oracle stale — auto-syncing first...', 'info');
+      try {
+        const syncTx = await coilWrite.syncObservation();
+        await syncTx.wait();
+        toast('TWAP synced, retrying close...', 'info');
+        try {
+          await coilWrite.closePosition.staticCall(id);
+        } catch (e2) {
+          console.error('[perps] close retry err:', e2);
+          const en2 = (e2.revert?.name || '').toLowerCase();
+          if (en2.includes('positiontooyoung') || (e2.message||'').toLowerCase().includes('positiontooyoung')) {
+            return toast(`Position #${id} 还太年轻. 等到 50 blocks 再试.`, 'error');
+          }
+          if (en2.includes('insufficienthistory') || (e2.message||'').toLowerCase().includes('insufficienthistory')) {
+            return toast('⏳ TWAP 还需要更多历史 (~15 min from pool init).', 'error');
+          }
+          return toast('Close still failing: ' + (e2.shortMessage || e2.message || '').slice(0, 140), 'error');
+        }
+      } catch (syncErr) {
+        return toast('Sync failed: ' + (syncErr.shortMessage || syncErr.message), 'error');
+      }
+    }
+
+    // Send real tx
     const tx = await coilWrite.closePosition(id);
     toast('Closing #' + id + ': <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
     const rc = await tx.wait();
-    toast('Position #' + id + ' closed in block ' + rc.blockNumber, 'success');
+    if (rc.status !== 1) return toast('Tx reverted on-chain', 'error');
+    toast('🎯 Position #' + id + ' closed in block ' + rc.blockNumber, 'success');
+    _myIdsCache = null;
     refreshAll();
   } catch (e) {
-    const msg = (e.shortMessage || e.message || '').toLowerCase();
+    console.error('[perps] close outer err:', e);
+    const errName = (e.revert?.name || '').toLowerCase();
+    const msg = ((e.shortMessage||'') + ' ' + (e.message||'') + ' ' + errName).toLowerCase();
     if (msg.includes('positiontooyoung')) {
-      toast('Position too young — minimum hold is ~10 min (50 blocks). Wait a bit more.', 'error');
-    } else if (msg.includes('deathswitchactive')) {
-      toast('Death switch active — contract frozen, but close still works after min hold.', 'error');
+      toast(`⏳ Position 还太年轻 — 最低 50 blocks (~10 min)`, 'error');
+    } else if (msg.includes('notowner')) {
+      toast(`不是你的仓位`, 'error');
+    } else if (msg.includes('empty')) {
+      toast(`已平仓`, 'error');
+    } else if (msg.includes('sameblock')) {
+      toast(`不能同一区块开+平. 等下一个区块`, 'error');
+    } else if (msg.includes('insolvent')) {
+      toast(`协议余额不足支付盈利`, 'error');
+    } else if (msg.includes('deathswitch')) {
+      toast(`Death switch 激活`, 'error');
     } else {
-      toast('Close failed: ' + (e.shortMessage || e.message || String(e)).slice(0, 120), 'error');
+      toast('Close failed: ' + (e.shortMessage || e.message || String(e)).slice(0, 140), 'error');
     }
   }
 }
