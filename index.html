@@ -2478,6 +2478,16 @@ input { border-radius: 12px !important; }
   color: var(--paper);
 }
 
+
+.p-meta-pill-locked {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background: rgba(16, 185, 129, 0.06) !important;
+}
+.p-meta-pill-locked:hover {
+  border-color: var(--long) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 </head>
@@ -2513,6 +2523,10 @@ input { border-radius: 12px !important; }
     <a href="#" id="contractLink" target="_blank" class="p-meta-pill" title="contract on Etherscan">
       <span class="p-meta-l">contract</span>
       <span class="p-meta-v" id="contractAddrShort">—</span>
+    </a>
+    <a href="https://etherscan.io/tx/0x621ed44507944021746126c954cf4d107b5db3a9da02a1e9c8bab8b3b064cbe6" target="_blank" rel="noopener" class="p-meta-pill p-meta-pill-locked" title="LP locked at UNCX — click for proof tx">
+      <span class="p-meta-l">LP</span>
+      <span class="p-meta-v" style="color:var(--long)">🔒 UNCX</span>
     </a>
     <a href="https://x.com/perpsV4" target="_blank" rel="noopener" class="p-meta-pill" title="@perpsV4">
       <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
@@ -2894,7 +2908,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // CONFIG — fill in after deploy
 // ────────────────────────────────────────────────────────────────────
 const CONFIG = {
-  COIL_ADDRESS:   "0x041258A73dF56ada0F92E0446D42b8A4AB166Ec4",  // deployed PERPS v0.2.2  (hook bits = 0x6EC4)
+  COIL_ADDRESS:   "0x041258A73dF56ada0F92E0446D42b8A4AB166Ec4",
+  LP_LOCK_TX:     "0x621ed44507944021746126c954cf4d107b5db3a9da02a1e9c8bab8b3b064cbe6",  // UNCX lock proof
+  LP_LOCKER:      "uncx",  // deployed PERPS v0.2.2  (hook bits = 0x6EC4)
   CHAIN_ID:       1,
   CHAIN_NAME:     "ethereum",
   RPC_FALLBACK:   "https://eth.llamarpc.com",
@@ -2915,6 +2931,7 @@ const COIL_ABI = [
   "function getMarkTick() view returns (int24)",
   "function getHealthFactor(uint256) view returns (int256)",
   "function nextPositionId() view returns (uint256)",
+  "function poolId() view returns (bytes32)",
   // State
   "function totalLongOi() view returns (uint256)",
   "function totalShortOi() view returns (uint256)",
@@ -2948,7 +2965,26 @@ const COIL_ABI = [
   "function deathSwitchActivated() view returns (bool)",
   "function DEATH_INACTIVITY() view returns (uint256)",
   "function MIN_HOLD_BLOCKS() view returns (uint32)",
-  // v0.2 errors
+  // ━━ Perps errors (renamed from Coil_*) ━━
+  "error Perps_Paused()",
+  "error Perps_NotGovernance()",
+  "error Perps_BadInput()",
+  "error Perps_DustPosition()",
+  "error Perps_PositionTooYoung()",
+  "error Perps_OverLimit()",
+  "error Perps_Empty()",
+  "error Perps_Healthy()",
+  "error Perps_StillAlive()",
+  "error Perps_DeathSwitchActive()",
+  "error Perps_NoFunds()",
+  "error Perps_Insolvent()",
+  "error Perps_LiqCapPerBlock()",
+  "error Perps_WrongPool()",
+  // ━━ Observations / Oracle library errors ━━
+  "error Stale()",
+  "error InsufficientHistory()",
+  "error InsufficientObservation()",
+  // Legacy Coil_* (for old contracts, harmless to include)
   "error Coil_PositionTooYoung()",
   "error Coil_StillAlive()",
   "error Coil_DeathSwitchActive()",
@@ -3303,25 +3339,51 @@ async function refreshStats() {
 // (bypasses TWAP staleness, always shows live numbers)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const POOL_MANAGER_ADDR = "0x000000000004444c5dc75cB358380D2e3dE08A90";
-const POOL_MGR_ABI = [
-  "function getSlot0(bytes32 id) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"
+// V4 StateView lens contract — needed because PoolManager itself uses extsload
+// (PoolManager.getSlot0 doesn\'t exist; must go through this view contract)
+const STATE_VIEW_ADDR = "0x7ffe42c4a5deea5b0fec41c94c136cf115597227";
+const STATE_VIEW_ABI = [
+  "function getSlot0(bytes32 id) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)",
+  "function getLiquidity(bytes32 id) view returns (uint128)"
 ];
 let _poolManager = null;
 let _cachedPoolId = null;
 let _lastSpotTick = null;
 let _lastSpotTime = 0;
 
+// Client-side poolId computation (independent of contract getter)
+// V4 poolId = keccak256(abi.encode(currency0, currency1, fee, tickSpacing, hooks))
+function computePoolIdFromKey() {
+  if (!CONFIG.COIL_ADDRESS || CONFIG.COIL_ADDRESS === '0x0000000000000000000000000000000000000000') return null;
+  const ZERO = '0x0000000000000000000000000000000000000000';  // ETH
+  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    ['address', 'address', 'uint24', 'int24', 'address'],
+    [ZERO, CONFIG.COIL_ADDRESS, 3000, 60, CONFIG.COIL_ADDRESS]
+  );
+  return ethers.keccak256(encoded);
+}
+
 async function getCurrentSpotTick() {
   const prov = provider || readOnly;
-  if (!prov || !coilRead) return null;
+  if (!prov) return null;
   try {
     if (!_poolManager || _poolManager.runner !== prov) {
-      _poolManager = new ethers.Contract(POOL_MANAGER_ADDR, POOL_MGR_ABI, prov);
+      _poolManager = new ethers.Contract(STATE_VIEW_ADDR, STATE_VIEW_ABI, prov);
     }
     if (!_cachedPoolId) {
-      _cachedPoolId = await coilRead.poolId().catch(() => null);
+      // Try contract getter first, then compute client-side
+      if (coilRead) {
+        _cachedPoolId = await coilRead.poolId().catch(() => null);
+      }
+      if (!_cachedPoolId || _cachedPoolId === '0x' + '0'.repeat(64)) {
+        _cachedPoolId = computePoolIdFromKey();
+        console.log('[perps] poolId computed client-side:', _cachedPoolId);
+      } else {
+        console.log('[perps] poolId from contract:', _cachedPoolId);
+      }
       if (!_cachedPoolId) return null;
     }
+    // Cache 3s
     const now = Date.now();
     if (_lastSpotTick !== null && now - _lastSpotTime < 3000) return _lastSpotTick;
     const slot0 = await _poolManager.getSlot0(_cachedPoolId);
@@ -3657,16 +3719,39 @@ async function openPosition() {
     try {
       await coilWrite.openPosition.staticCall(isLong, sizeWei, { value: collateralWei });
     } catch (simErr) {
+      // Detailed diagnostics
+      console.error('[perps] open static err:', simErr);
+      console.error('  data:', simErr.data || simErr?.info?.error?.data);
+      console.error('  code:', simErr.code);
+
       const msg = (simErr.shortMessage || simErr.message || '').toLowerCase();
-      if (msg.includes('insufficienthistory') || msg.includes('stale') || msg.includes('0x4cc7e0a4')) {
+      const rawData = (simErr.data || simErr?.info?.error?.data || '').toLowerCase();
+      const errSelector = rawData.length >= 10 ? rawData.slice(0, 10) : '';
+
+      // Known error selectors (4-byte function selectors of custom errors)
+      // Computed: keccak256("InsufficientHistory()") = 0x4cc7e0a4...
+      //           keccak256("Stale()")               = 0x88f1c510...
+      //           keccak256("Perps_Paused()")        = (depends, but msg.includes works)
+      const STALE_SELECTORS = ['0x88f1c510', '0xc6dde2a8'];
+      const INSUFFHIST_SELECTORS = ['0x4cc7e0a4', '0xc8acbe62'];
+
+      if (msg.includes('insufficienthistory') || INSUFFHIST_SELECTORS.includes(errSelector)) {
+        needsSync = true;
+      } else if (msg.includes('stale') || STALE_SELECTORS.includes(errSelector)) {
         needsSync = true;
       } else if (msg.includes('paused')) {
         return toast('Trading paused by governance', 'error');
-      } else if (msg.includes('oicap') || msg.includes('cap')) {
+      } else if (msg.includes('overlimit') || msg.includes('oicap')) {
         return toast('Position exceeds OI cap — reduce size', 'error');
+      } else if (msg.includes('badinput') || msg.includes('dust')) {
+        return toast('Collateral or size too small', 'error');
+      } else if (msg.includes('missing revert data')) {
+        // Unknown revert — likely TWAP not enough history (no error data when oracle reverts)
+        // Auto-attempt sync as best guess
+        console.warn('[perps] missing revert data — assuming oracle issue, will try sync');
+        needsSync = true;
       } else {
-        console.error('[perps] open static err:', simErr);
-        return toast('Would revert: ' + (simErr.shortMessage || simErr.message || '').slice(0, 140), 'error');
+        return toast('Would revert: ' + (simErr.shortMessage || simErr.message || rawData || '').slice(0, 140), 'error');
       }
     }
 
@@ -3684,20 +3769,15 @@ async function openPosition() {
       try {
         await coilWrite.openPosition.staticCall(isLong, sizeWei, { value: collateralWei });
       } catch (e2) {
+        console.error('[perps] open retry err:', e2);
         const m = (e2.shortMessage || e2.message || '').toLowerCase();
-        if (m.includes('insufficienthistory')) {
-          // TWAP needs MARK_TWAP_SECONDS (15 min). Show ETA.
-          try {
-            const lastTs = await coilRead.lastSwapTimestamp();
-            const now = Math.floor(Date.now() / 1000);
-            const since = now - Number(lastTs);
-            const need = 15 * 60;
-            if (since < need) {
-              const mins = Math.ceil((need - since) / 60);
-              return toast(`⏳ TWAP needs <b>~${mins} more min</b> of history. Pool needs 15min to bootstrap.`, 'error');
-            }
-          } catch {}
-          return toast('TWAP needs more history. Wait ~15 min after launch.', 'error');
+        const isHistoryErr = m.includes('insufficienthistory') || m.includes('missing revert data');
+        if (isHistoryErr) {
+          // TWAP needs MARK_TWAP_SECONDS (15 min) of history accumulated since first observation
+          // After pool init, the FIRST observation is at init time.
+          // After 15 min from init, openPosition should work.
+          // We can't easily query pool creation time; just suggest wait.
+          return toast('⏳ TWAP needs ~15 min of history from pool init. Wait a few minutes and retry.', 'error');
         }
         return toast('Still failing: ' + (e2.shortMessage || e2.message || '').slice(0, 140), 'error');
       }
