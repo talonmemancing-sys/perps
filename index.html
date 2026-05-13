@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="./logo.png">
 <meta name="description" content="The first perpetuals protocol that lives entirely inside a Uniswap V4 pool. No engine. No oracle. Just hooks.">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:site" content="@perpsuniV4">
+<meta name="twitter:site" content="@perpsV4">
 <meta property="og:title" content="PERPS">
 <meta property="og:description" content="Virtual perps on Uniswap V4. No oracle. Just hooks.">
 <meta property="og:image" content="./logo.png">
@@ -2505,7 +2505,7 @@ input { border-radius: 12px !important; }
 
 <!-- ─────── APP NAV ─────── -->
 <nav class="p-nav">
-  <a href="https://x.com/perpsuniv4" target="_blank" rel="noopener" class="p-brand" title="@perpsuniV4 on X">
+  <a href="https://x.com/perpsV4" target="_blank" rel="noopener" class="p-brand" title="@perpsV4 on X">
     <img src="./logo.png" alt="perps." class="p-logo-img" onerror="this.style.display='none'">
     <span>perps<span class="dot">.</span></span>
   </a>
@@ -2514,9 +2514,9 @@ input { border-radius: 12px !important; }
       <span class="p-meta-l">contract</span>
       <span class="p-meta-v" id="contractAddrShort">—</span>
     </a>
-    <a href="https://x.com/perpsuniv4" target="_blank" rel="noopener" class="p-meta-pill" title="@perpsuniV4">
+    <a href="https://x.com/perpsV4" target="_blank" rel="noopener" class="p-meta-pill" title="@perpsV4">
       <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-      <span class="p-meta-v">@perpsuniV4</span>
+      <span class="p-meta-v">@perpsV4</span>
     </a>
   </div>
   <div class="p-nav-right">
@@ -2545,7 +2545,7 @@ input { border-radius: 12px !important; }
 <!-- ─────── LIVE TICKER ─────── -->
 <div class="app-ticker">
   <div class="app-ticker-item">
-    <div class="l">mark · twap</div>
+    <div class="l">mark price</div>
     <div class="v" id="t-mark">—</div>
   </div>
   <div class="app-ticker-item">
@@ -2745,7 +2745,7 @@ input { border-radius: 12px !important; }
     </div>
 
     <div class="stat-block">
-      <h4>Mark · 5-min TWAP</h4>
+      <h4>Mark price · live</h4>
       <div class="big-stat accent" id="s-mark">—</div>
       <div style="font-family:var(--mono); font-size:11px; color:var(--paper-faint); margin-top:6px">
         tick <span id="s-tick" style="color:var(--paper-dim)">—</span>
@@ -2922,7 +2922,8 @@ const COIL_ABI = [
   "function treasuryEth() view returns (uint256)",
   "function insuranceEth() view returns (uint256)",
   "function polEth() view returns (uint256)",
-  "function polCoil() view returns (uint256)",
+  "function polPerps() view returns (uint256)",
+  "function polCoil() view returns (uint256)",  // backward compat
   "function fundingIndexLong() view returns (int256)",
   "function fundingIndexShort() view returns (int256)",
   "function funding_k() view returns (uint256)",
@@ -3004,7 +3005,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 function setupTickerPlaceholders() {
   ['t-mark','t-funding','t-loi','t-soi','t-treasury','t-insurance'].forEach(id => {
-    document.getElementById(id).textContent = '—';
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
   });
 }
 
@@ -3175,20 +3177,26 @@ function populateDemoData() {
 
 async function refreshStats() {
   try {
-    const [markTick, loi, soi, tEth, iEth, pEth, pCoil, fk, burned, pending, totalSupply, minBuyback] = await Promise.all([
-      coilRead.getMarkTick().catch(() => 0),
-      coilRead.totalLongOi(),
-      coilRead.totalShortOi(),
-      coilRead.treasuryEth(),
-      coilRead.insuranceEth(),
-      coilRead.polEth(),
-      coilRead.polCoil(),
-      coilRead.funding_k(),
+    // Use Promise.allSettled with per-call fallbacks for resilience
+    // Spot tick fallback for mark (Perps3 slim removed getMarkTick)
+    const spotTickPromise = getCurrentSpotTick();
+    const [markTick, spotTick, loi, soi, tEth, iEth, pEth, pCoil, fk, burned, pending, totalSupply, minBuyback] = await Promise.all([
+      coilRead.getMarkTick().catch(() => null),
+      spotTickPromise,
+      coilRead.totalLongOi().catch(() => 0n),
+      coilRead.totalShortOi().catch(() => 0n),
+      coilRead.treasuryEth().catch(() => 0n),
+      coilRead.insuranceEth().catch(() => 0n),
+      coilRead.polEth().catch(() => 0n),
+      coilRead.polPerps().catch(() => coilRead.polCoil().catch(() => 0n)),
+      coilRead.funding_k().catch(() => 0n),
       coilRead.totalBurned().catch(() => 0n),
       coilRead.buybackEth().catch(() => 0n),
       coilRead.totalSupply().catch(() => 1_000_000_000n * (10n ** 18n)),
       coilRead.MIN_BUYBACK_ETH().catch(() => ethers.parseEther('0.05')),
     ]);
+    // Fallback chain: getMarkTick (TWAP) → spot tick → 0
+    const effectiveTick = (markTick !== null) ? Number(markTick) : (spotTick !== null ? spotTick : 0);
     // Pull params for sidebar
     try {
       const [tax, fk2] = await Promise.all([
@@ -3199,7 +3207,7 @@ async function refreshStats() {
       document.getElementById('p-k').textContent = (Number(fk2) / 1e18).toFixed(3);
     } catch {}
 
-    currentMarkTick = Number(markTick);
+    currentMarkTick = effectiveTick;
     currentMarkPriceX18 = priceFromTick(currentMarkTick);
 
     const markCoilPerEth = formatPriceFromTick(currentMarkTick);
@@ -3283,7 +3291,9 @@ async function refreshStats() {
       document.getElementById('my-oi').textContent = formatPerps(userOi);
     }
   } catch (e) {
-    console.error('stats err', e);
+    console.error('[perps] stats err:', e);
+    // Don't silently swallow — log full error for diagnostics
+    if (e?.code) console.error('  code:', e.code, 'method:', e?.info?.method);
   }
 }
 
