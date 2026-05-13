@@ -2608,7 +2608,7 @@ input { border-radius: 12px !important; }
       <div class="hiw-line"><span class="hiw-dot">③</span><span>Filled instantly at TWAP — no orderbook</span></div>
     </div>
     <div id="mark-warn" style="display:none; border-left:2px solid var(--short); padding:10px 14px; margin-bottom:18px; background:rgba(255,107,107,0.06); font-family:var(--mono); font-size:11px; color:var(--short); line-height:1.55;">
-      ⛔ <b>Mark price not loaded</b> — opening now would create a <b>stuck position</b> (collateral lost). Wait for stats to populate or sync TWAP.
+      ⏳ <b>Mark price loading…</b> Click Open — we will auto-sync if needed.
     </div>
 
     <div class="dir-toggle">
@@ -3312,11 +3312,16 @@ let _lastSpotTick = null;
 let _lastSpotTime = 0;
 
 async function getCurrentSpotTick() {
-  if (!provider) return null;
+  const prov = provider || readOnly;
+  if (!prov || !coilRead) return null;
   try {
-    if (!_poolManager) _poolManager = new ethers.Contract(POOL_MANAGER_ADDR, POOL_MGR_ABI, provider);
-    if (!_cachedPoolId) _cachedPoolId = await coilRead.poolId();
-    // Cache 3s to avoid hammering RPC
+    if (!_poolManager || _poolManager.runner !== prov) {
+      _poolManager = new ethers.Contract(POOL_MANAGER_ADDR, POOL_MGR_ABI, prov);
+    }
+    if (!_cachedPoolId) {
+      _cachedPoolId = await coilRead.poolId().catch(() => null);
+      if (!_cachedPoolId) return null;
+    }
     const now = Date.now();
     if (_lastSpotTick !== null && now - _lastSpotTime < 3000) return _lastSpotTick;
     const slot0 = await _poolManager.getSlot0(_cachedPoolId);
@@ -3324,7 +3329,7 @@ async function getCurrentSpotTick() {
     _lastSpotTime = now;
     return _lastSpotTick;
   } catch (e) {
-    console.warn('spot tick err:', e?.shortMessage || e?.message);
+    console.warn('[perps] spot tick err:', e?.shortMessage || e?.message);
     return null;
   }
 }
@@ -3579,17 +3584,11 @@ function recalc() {
   document.getElementById('lev-num').textContent = lev.toFixed(1);
   document.getElementById('lev-info').textContent = lev.toFixed(1) + '×';
 
-  // Show/hide mark-not-loaded warning
+  // Mark warn — non-blocking, open btn will auto-sync
   const markWarn = document.getElementById('mark-warn');
   if (markWarn) {
     const markLoaded = currentMarkPriceX18 && currentMarkPriceX18 !== 0n;
     markWarn.style.display = markLoaded ? 'none' : 'block';
-    // Also disable open button when not loaded
-    const btn = document.getElementById('openBtn');
-    if (btn && account && !markLoaded) {
-      btn.disabled = true;
-      btn.textContent = 'Mark price not loaded — wait';
-    }
   }
 
   if (!collateralIn || !currentMarkPriceX18 || currentMarkPriceX18 === 0n) {
@@ -3623,45 +3622,104 @@ async function openPosition() {
   if (!collateralIn || collateralIn < 0.01) return toast('Collateral must be ≥ 0.01 ETH', 'error');
   if (lev > 10) return toast('Max leverage is 10×', 'error');
 
-  // CRITICAL pre-flight: mark price must be live BEFORE submitting
-  // (Otherwise a stale/zero priceX18 → sizeWei=0 → STUCK POSITION on-chain!)
-  if (!currentMarkPriceX18 || currentMarkPriceX18 === 0n) {
-    return toast('⛔ Mark price not loaded — refresh page (Ctrl+Shift+R) and wait for stats to populate.', 'error');
-  }
-  if (!currentMarkTick) {
-    return toast('⛔ Mark tick = 0 — pool not ready or oracle stale. Sync TWAP first.', 'error');
-  }
-
-  // Compute size: size_coil = collateral × lev × price (PERPS/ETH × 1e18)
-  const collateralWei = ethers.parseEther(collateralIn.toString());
-  const levBigInt = BigInt(Math.floor(lev * 1000));
-  const sizeWei = (collateralWei * levBigInt * currentMarkPriceX18) / (1000n * (10n ** 18n));
-
-  // CRITICAL guard: never submit size=0 (contract creates an unrecoverable stuck position!)
-  if (sizeWei === 0n) {
-    return toast('⛔ Computed size = 0 — would create a stuck position. Refresh page.', 'error');
-  }
-  if (sizeWei > ((2n ** 128n) - 1n)) return toast('Size overflow — reduce collateral or leverage', 'error');
+  const ob = document.getElementById('openBtn');
+  const isLong = currentDir === 'long';
 
   try {
-    document.getElementById('openBtn').disabled = true;
-    document.getElementById('openBtn').textContent = 'Confirming…';
-    const tx = await coilWrite.openPosition(
-      currentDir === 'long',
-      sizeWei,
-      { value: collateralWei }
-    );
-    toast('Tx sent: <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
-    document.getElementById('openBtn').textContent = 'Mining…';
+    ob.disabled = true;
+
+    // ① If mark not loaded, hydrate from spot tick (always works post-init)
+    if (!currentMarkPriceX18 || currentMarkPriceX18 === 0n || !currentMarkTick) {
+      ob.textContent = 'Loading mark price…';
+      const spotTick = await getCurrentSpotTick();
+      if (spotTick === null) {
+        toast('⛔ Pool not initialized yet — wait a moment and retry.', 'error');
+        return;
+      }
+      currentMarkTick = spotTick;
+      currentMarkPriceX18 = priceFromTick(spotTick);
+      if (!currentMarkPriceX18 || currentMarkPriceX18 === 0n) {
+        toast('⛔ Cannot derive price from spot tick. Refresh page.', 'error');
+        return;
+      }
+    }
+
+    // ② Compute size
+    const collateralWei = ethers.parseEther(collateralIn.toString());
+    const levBI = BigInt(Math.floor(lev * 1000));
+    const sizeWei = (collateralWei * levBI * currentMarkPriceX18) / (1000n * (10n ** 18n));
+    if (sizeWei === 0n) return toast('⛔ Size = 0. Increase collateral.', 'error');
+    if (sizeWei > ((2n ** 128n) - 1n)) return toast('Size overflow.', 'error');
+
+    // ③ Pre-flight static call
+    ob.textContent = 'Checking…';
+    let needsSync = false;
+    try {
+      await coilWrite.openPosition.staticCall(isLong, sizeWei, { value: collateralWei });
+    } catch (simErr) {
+      const msg = (simErr.shortMessage || simErr.message || '').toLowerCase();
+      if (msg.includes('insufficienthistory') || msg.includes('stale') || msg.includes('0x4cc7e0a4')) {
+        needsSync = true;
+      } else if (msg.includes('paused')) {
+        return toast('Trading paused by governance', 'error');
+      } else if (msg.includes('oicap') || msg.includes('cap')) {
+        return toast('Position exceeds OI cap — reduce size', 'error');
+      } else {
+        console.error('[perps] open static err:', simErr);
+        return toast('Would revert: ' + (simErr.shortMessage || simErr.message || '').slice(0, 140), 'error');
+      }
+    }
+
+    // ④ Auto-sync if needed
+    if (needsSync) {
+      ob.textContent = 'Syncing TWAP…';
+      toast('Oracle stale — auto-syncing…', 'info');
+      try {
+        const syncTx = await coilWrite.syncObservation();
+        await syncTx.wait();
+      } catch (syncErr) {
+        return toast('Sync failed: ' + (syncErr.shortMessage || syncErr.message || '').slice(0, 140), 'error');
+      }
+      // Retry static call after sync
+      try {
+        await coilWrite.openPosition.staticCall(isLong, sizeWei, { value: collateralWei });
+      } catch (e2) {
+        const m = (e2.shortMessage || e2.message || '').toLowerCase();
+        if (m.includes('insufficienthistory')) {
+          // TWAP needs MARK_TWAP_SECONDS (15 min). Show ETA.
+          try {
+            const lastTs = await coilRead.lastSwapTimestamp();
+            const now = Math.floor(Date.now() / 1000);
+            const since = now - Number(lastTs);
+            const need = 15 * 60;
+            if (since < need) {
+              const mins = Math.ceil((need - since) / 60);
+              return toast(`⏳ TWAP needs <b>~${mins} more min</b> of history. Pool needs 15min to bootstrap.`, 'error');
+            }
+          } catch {}
+          return toast('TWAP needs more history. Wait ~15 min after launch.', 'error');
+        }
+        return toast('Still failing: ' + (e2.shortMessage || e2.message || '').slice(0, 140), 'error');
+      }
+    }
+
+    // ⑤ Send real tx
+    ob.textContent = 'Confirming…';
+    const tx = await coilWrite.openPosition(isLong, sizeWei, { value: collateralWei });
+    toast('Tx: <a class="tx-link" target="_blank" href="' + CONFIG.EXPLORER + '/tx/' + tx.hash + '">' + tx.hash.slice(0,10) + '…</a>', 'info');
+    ob.textContent = 'Mining…';
     const rc = await tx.wait();
-    toast('Position opened in block <b>' + rc.blockNumber + '</b>', 'success');
+    if (rc.status !== 1) return toast('Tx reverted on-chain', 'error');
+    toast('🎯 Position opened in block <b>' + rc.blockNumber + '</b>', 'success');
     document.getElementById('collateral-in').value = '';
+    _myIdsCache = null;
     refreshAll();
   } catch (e) {
-    toast('Open failed: ' + (e.shortMessage || e.message || e), 'error');
+    console.error('[perps] open err:', e);
+    toast('Open failed: ' + (e.shortMessage || e.message || String(e)).slice(0, 140), 'error');
   } finally {
-    document.getElementById('openBtn').disabled = false;
-    document.getElementById('openBtn').textContent = 'Open ' + (currentDir === 'long' ? 'Long' : 'Short');
+    ob.disabled = false;
+    ob.textContent = 'Open ' + (isLong ? 'Long' : 'Short');
   }
 }
 
