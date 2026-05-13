@@ -2636,7 +2636,7 @@ input { border-radius: 12px !important; }
         <span class="max" onclick="setMaxCollateral()">max</span>
       </label>
       <div class="input-wrap">
-        <input id="collateral-in" type="number" min="0.01" step="0.01" placeholder="0.10" oninput="recalc()">
+        <input id="collateral-in" type="number" min="0.012" step="0.01" placeholder="0.10" oninput="recalc()">
         <span class="denom">ETH</span>
       </div>
     </div>
@@ -2644,7 +2644,7 @@ input { border-radius: 12px !important; }
     <div class="field">
       <label>
         <span>Leverage</span>
-        <span id="lev-info" style="color:var(--paper-dim)">5×</span>
+        <span id="lev-info" style="color:var(--paper-dim)">5× · min ~0.0105 ETH</span>
       </label>
       <div class="lev-row">
         <div class="lev-display"><span id="lev-num">5</span><small>×</small></div>
@@ -3644,7 +3644,8 @@ function recalc() {
   const collateralIn = parseFloat(document.getElementById('collateral-in').value);
   const lev = parseFloat(document.getElementById('lev-slider').value);
   document.getElementById('lev-num').textContent = lev.toFixed(1);
-  document.getElementById('lev-info').textContent = lev.toFixed(1) + '×';
+  const _minCol = (0.01 / (1 - 0.005 * lev) + 0.0001);
+  document.getElementById('lev-info').textContent = lev.toFixed(1) + '× · min ~' + _minCol.toFixed(4) + ' ETH';
 
   // Mark warn — non-blocking, open btn will auto-sync
   const markWarn = document.getElementById('mark-warn');
@@ -3681,7 +3682,12 @@ async function openPosition() {
   if (!signer || !coilWrite) return toast('Connect wallet first', 'error');
   const collateralIn = parseFloat(document.getElementById('collateral-in').value);
   const lev = parseFloat(document.getElementById('lev-slider').value);
-  if (!collateralIn || collateralIn < 0.01) return toast('Collateral must be ≥ 0.01 ETH', 'error');
+  // Dynamic min: collateral × (1 + 0.005×lev) must exceed 0.01 ETH
+  // So minimum collateral = 0.01 / (1 - 0.005×lev) + tiny buffer
+  const minCollat = 0.01 / (1 - 0.005 * lev) + 0.0001;
+  if (!collateralIn || collateralIn < minCollat) {
+    return toast(`Collateral must be ≥ ${minCollat.toFixed(5)} ETH for ${lev}× lev (covers 0.5% open fee + 0.01 min)`, 'error');
+  }
   if (lev > 10) return toast('Max leverage is 10×', 'error');
 
   const ob = document.getElementById('openBtn');
@@ -3743,8 +3749,11 @@ async function openPosition() {
         return toast('Trading paused by governance', 'error');
       } else if (msg.includes('overlimit') || msg.includes('oicap')) {
         return toast('Position exceeds OI cap — reduce size', 'error');
-      } else if (msg.includes('badinput') || msg.includes('dust')) {
-        return toast('Collateral or size too small', 'error');
+      } else if (msg.includes('dustposition') || msg.includes('dust')) {
+        const minBuf = (0.01 / (1 - 0.005 * lev) + 0.0001).toFixed(5);
+        return toast(`Collateral after open fee < 0.01 ETH minimum. Send ≥ ${minBuf} ETH for ${lev}× lev.`, 'error');
+      } else if (msg.includes('badinput') || msg.includes('badleverage')) {
+        return toast('Invalid leverage or collateral — check inputs', 'error');
       } else if (msg.includes('missing revert data')) {
         // Unknown revert — likely TWAP not enough history (no error data when oracle reverts)
         // Auto-attempt sync as best guess
